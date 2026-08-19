@@ -426,13 +426,16 @@ def _derive_signals(d: dict) -> set[str]:
     emp = to_int(co.get("employees"))
     if emp:
         sig.add("smb" if emp < 200 else ("midmarket" if emp < 2000 else "enterprise"))
+    # Audience-size bands describe reach. Applying them to an employee count
+    # would label a healthy 120-person company "small-audience".
     aud = to_int(d.get("audience"))
-    if aud >= 100_000:
-        sig.add("large-audience")
-    elif aud >= 10_000:
-        sig.add("mid-audience")
-    elif aud > 0:
-        sig.add("small-audience")
+    if d.get("audience_kind") in {"followers", "subscribers"} and aud:
+        if aud >= 100_000:
+            sig.add("large-audience")
+        elif aud >= 10_000:
+            sig.add("mid-audience")
+        else:
+            sig.add("small-audience")
     return sig
 
 

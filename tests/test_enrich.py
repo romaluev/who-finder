@@ -43,6 +43,14 @@ def test_keywords_skip_stopwords():
     kw = keywords("We build generative video ads for the brands of the world")
     assert "generative" in kw
     assert "the" not in kw
+    assert "build" not in kw
+
+
+def test_keywords_strip_sentence_punctuation():
+    """`brands.` and `brands` are one theme, not two."""
+    kw = keywords("ai video for brands. Great brands deserve ai video")
+    assert "brands" in kw
+    assert "brands." not in kw
 
 
 def test_profile_url_splits_person_and_company():
@@ -162,6 +170,7 @@ def test_signals_derive_from_text_and_numbers():
             "headline": "",
             "recent": [{"title": "we raised a Series A"}],
             "audience": 250_000,
+            "audience_kind": "followers",
             "verified": True,
             "company": {"funding_rounds": 2, "last_round_date": "2025-01-01", "employees": 40},
         }
@@ -172,6 +181,22 @@ def test_signals_derive_from_text_and_numbers():
     assert "verified" in d
     assert "large-audience" in d
     assert "smb" in d
+
+
+def test_headcount_is_not_described_as_an_audience():
+    """A 120-person company is `smb`, never `small-audience`."""
+    d = enrich.__globals__["_derive_signals"](
+        {
+            "bio": "AI video tooling",
+            "headline": "",
+            "recent": [],
+            "audience": 120,
+            "audience_kind": "employees",
+            "company": {"employees": 120},
+        }
+    )
+    assert "smb" in d
+    assert not any(s.endswith("-audience") for s in d)
 
 
 def test_similar_and_employee_lists_become_candidate_rows():

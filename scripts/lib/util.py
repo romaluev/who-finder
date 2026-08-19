@@ -82,6 +82,8 @@ use uses using used get gets getting got want wants need needs like likes look l
 come comes take takes see sees based love loves join joins learn learns share shares create creates
 creating creator best new news also every year years day days time times thing things way ways lot
 people person team teams company companies world today great good really much many well back going
+across along among within without upon per via plus etc inc ltd llc since ago yet still even ever
+employee employees employed staff role roles job jobs work worked hiring hire hired
 """.split())
 
 # Cluster themes must read like a topic, not a verb. Four characters is the
@@ -93,6 +95,9 @@ def keywords(text: str, limit: int = 12) -> list[str]:
     toks = re.findall(r"[a-z][a-z0-9+.#-]{2,}", (text or "").lower())
     seen: dict[str, int] = {}
     for t in toks:
+        # Sentence punctuation rides along with the token; `brands.` and
+        # `brands` are the same theme and must not count as two.
+        t = t.strip(".-")
         if t in STOP or len(t) < 3:
             continue
         seen[t] = seen.get(t, 0) + 1

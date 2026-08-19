@@ -1,25 +1,58 @@
-# How to share this (you will not run it)
+# Sharing this with your team
 
-This folder is the product. Not the Higgsfield repo. Not `creator-finder`. Not your API key.
+Public repo: **https://github.com/romaluev/who-finder**
 
-## What you send
+## Send them this
 
-1. Zip **this directory** (`who-finder/`, the one that contains `SKILL.md`).
-2. Or put this directory in its own git repo and send the clone URL.
-3. Send a one-line note:
+> Install:
+> ```bash
+> git clone https://github.com/romaluev/who-finder ~/.cursor/skills/who-finder
+> export SCRAPECREATORS_API_KEY=...   # your own key from https://scrapecreators.com
+> ```
+> Then ask your agent: *"find founders of AI video tools"*, *"find companies building text-to-video"*, *"who is hiring for AI video editors"*, or *"journalists covering generative video"*.
 
-> Drop this folder into `.claude/skills/who-finder` or `~/.cursor/skills/who-finder`. Set `SCRAPECREATORS_API_KEY` to your own key from https://scrapecreators.com. Ask your agent: “find people who …”, “find companies that …”, “who is hiring for …”, or “find creators posting about …”.
+That is the whole onboarding. No pip, no build, no config file required on day one.
 
-Do not send:
+Swap the clone path for `~/.claude/skills/who-finder` or, for a single project, `.claude/skills/who-finder` inside the repo they are working in.
 
-- the rest of Higgsfield
-- `SCRAPECREATORS_API_KEY`
-- a `make install` / pip package
-- HubSpot, HeyReach, last30days, or the LinkedIn options PDF
-- `creator-finder` (this folder replaced it)
+## Each person needs their own API key
 
-## What they do
+Credits are billed per key, so keys are not shared. `doctor` reports `skipped-unconfigured` and exits 4 until one is set, which is a clear signal rather than a confusing empty result.
 
-Recipient install is in [README.md](README.md). Their agent reads `SKILL.md`. Their seen-list is sqlite in **their** working directory (`.who-finder/roster.sqlite`), so two people can share a roster by committing that folder or passing `--db`.
+```bash
+python3 ~/.cursor/skills/who-finder/scripts/who_finder.py doctor --agent
+```
 
-You do not need to run a search first. If they already have a skip/customer list, they `import` a CSV; they do not need yours.
+## Rosters are per-person unless you decide otherwise
+
+The seen-list lives in `.who-finder/roster.sqlite` in whatever directory the agent is working from. Two ways to make it shared:
+
+- point everyone at one file: `--db /shared/team-roster.sqlite`
+- or set `WHO_FINDER_HOME` to a synced folder
+
+Shared rosters are what stop two people cold-emailing the same person in the same week. Without one, "new" means new *to you*.
+
+## Give the team a shared ICP
+
+Fit scoring is a JSON file. Commit one to your own repo and have people point at it:
+
+```bash
+python3 .../who_finder.py find "BRIEF" --deep 10 --icp ./team-icp.json
+```
+
+Or seed a skip list of existing customers before anyone searches, so they never surface as fresh leads:
+
+```bash
+python3 .../who_finder.py import known-customers.csv
+```
+
+Format is in [assets/handoff.example.csv](assets/handoff.example.csv).
+
+## Do not send
+
+- your API key
+- the rest of the Higgsfield workspace
+- `creator-finder` — this replaced it
+- HubSpot / HeyReach exports, or anything CRM-shaped
+
+This tool researches and hands off a CSV. It does not message anyone, and it should not be wired into a sending pipeline without a human in between.

@@ -91,9 +91,13 @@ def findings(
         auds = [to_int(d.get("audience")) for d in enriched]
         sized = [a for a in auds if a > 0]
         if sized:
+            kinds = Counter(d.get("audience_kind") for d in enriched if to_int(d.get("audience")))
+            dominant = kinds.most_common(1)[0][0] if kinds else ""
+            label = "Headcount" if dominant == "employees" else "Audience"
             out.append(
-                f"Audience: median {human(_median(sized))}, largest {human(max(sized))}, "
-                f"{len(sized)}/{len(enriched)} enriched profiles report a number."
+                f"{label}: median {human(_median(sized))}, largest {human(max(sized))}, "
+                f"{len(sized)}/{len(enriched)} enriched {plural(len(enriched), 'profile')} "
+                "report a number."
             )
         masked = [d for d in enriched if d.get("masked")]
         if masked:
