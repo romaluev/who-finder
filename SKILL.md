@@ -3,7 +3,7 @@ name: who-finder
 description: Deep public research on people or companies by scenario (operators, firms, creators, hiring, press, A vs B). Plans the queries, fetches public profiles, scores ICP fit with attributed reasons, ranks by priority, and keeps a seen-list so outreach only gets new names. Use when asked to find people, find companies, find creators, research a market, build a shortlist, qualify leads, see who is hiring, find journalists covering a topic, compare two scenes, search LinkedIn public profiles, find YouTube or TikTok talent, or export a prospect handoff CSV. Also use for "who should we pitch", "who is doing X", "give me names", "find me operators at", "who covers this beat". Not for sending email or DMs, not for logged-in LinkedIn or Sales Navigator scraping, not for CRM writes, and not for researching a topic with no people in it — that is last30days.
 license: Apache-2.0
 metadata:
-  version: "3.4.0"
+  version: "3.5.0"
 ---
 
 # SKILL CONTRACT — READ BEFORE ANY TOOL CALL
@@ -79,7 +79,7 @@ Branch on `results.state`:
 | state | exit | do |
 |---|---|---|
 | `ready` | 0 | proceed |
-| `skipped-unconfigured` | 4 | **stop.** Tell the user to `export SCRAPECREATORS_API_KEY=...` (their own key, from scrapecreators.com). Do not substitute WebSearch. Do not produce names. |
+| `skipped-unconfigured` | 4 | **stop.** Tell the user to run `setup YOUR_KEY` (their own key, from scrapecreators.com) or `export SCRAPECREATORS_API_KEY=...`. Do not substitute WebSearch. Do not produce names. Point them at `docs/start.md` if they just cloned. |
 | `auth-failed` | 5 | **stop.** Their key is rejected — expired or wrong. |
 | `error` | 5 | report the message; do not retry more than once |
 
@@ -237,6 +237,7 @@ $BIN more --offset 10 --limit 10 --format md --out more --agent
 # COMMANDS
 
 ```bash
+$BIN setup YOUR_KEY                       # 0  save the key so tomorrow still works
 $BIN doctor --agent                       # 0  health + credit balance
 $BIN agent-context --agent                # 0  machine-readable map of this whole CLI
 $BIN which "who should we pitch" --agent  # 0  capability phrase -> command
@@ -447,6 +448,9 @@ One level deep, load only what the run needs.
 
 | file | when |
 |---|---|
+| [docs/start.md](docs/start.md) | they just cloned — point them here, do not improvise setup |
+| [docs/ask.md](docs/ask.md) | what a non-technical user types |
+| [docs/key.md](docs/key.md) | key missing, expired, or "it worked yesterday" |
 | [reference/cli.md](reference/cli.md) | every flag, envelope, sink, profile, exit code |
 | [reference/scenarios.md](reference/scenarios.md) | how detection works and what each scenario plans |
 | [reference/people.md](reference/people.md) · [reference/companies.md](reference/companies.md) · [reference/creators.md](reference/creators.md) | per-scenario angles and pitfalls |

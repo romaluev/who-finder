@@ -26,7 +26,7 @@ def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exi
         ["  2. A key     set — you're ready."]
         if key_set else
         ["  2. A key     not set yet. Get one at https://scrapecreators.com,",
-         "               then paste:  export SCRAPECREATORS_API_KEY=your-key"]
+         f"               then paste:  {invocation} setup YOUR_KEY"]
     )
     return "\n".join([
         "who-finder — describe who you're looking for, get back a shortlist",
@@ -38,22 +38,23 @@ def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exi
         '    "Find me the top 10 people building AI video tools, as a PDF."',
         "",
         "------------------------------------------------------------------------",
-        "Setting it up yourself? Two things, no programming needed:",
+        "Just cloned this? Three steps, no programming:",
         "",
         f"  1. Python    {python}  — already here, good.",
         *key_lines,
         "",
-        "See it work before you have a key — free, spends nothing:",
+        "See it work before you spend anything — free, no key needed:",
         f'    {invocation} find "founders of AI video tools" --deep 10 --dry-run',
         "",
-        "That prints the exact searches it would run and what they'd cost,",
-        "without running them.",
+        "That prints the exact searches it would run and what they'd cost.",
         "",
         "Once your key is set:",
         f"    {invocation} doctor",
         "        confirm the key works and see your balance",
-        f'    {invocation} find "founders of AI video tools" --deep 10 --format md,pdf --out shortlist',
+        f'    {invocation} find "founders of AI video tools" --deep 10 --format md,html --out shortlist',
         "        the real thing, written up as a document you can send",
+        "",
+        "Guides (in this folder):  docs/start.md   docs/ask.md   docs/key.md",
         "",
         "It never sends email, never logs into LinkedIn, and never invents a name",
         "or an inbox. Emails in the report are ones they published themselves.",
@@ -75,11 +76,12 @@ def doctor_card(r: dict) -> str:
     if r.get("key") == "missing":
         lines += [
             "  API key    missing",
-            "             export SCRAPECREATORS_API_KEY=your-key",
             "             get one at https://scrapecreators.com",
+            "             then:  who-finder setup YOUR_KEY",
         ]
     else:
-        lines.append("  API key    present")
+        src = r.get("key_source") or "set"
+        lines.append(f"  API key    present ({src})")
     if r.get("credits") is not None:
         lines.append(f"  credits    {r['credits']} left")
     if r.get("credits_error"):
@@ -112,6 +114,9 @@ def doctor_card(r: dict) -> str:
         lines += [
             "You can still preview searches without a key:",
             '  find "founders of AI video tools" --deep 10 --dry-run',
+            "",
+            "When you have a key:",
+            "  setup YOUR_KEY",
         ]
     else:
         lines.append(f"Fix: {r.get('fix') or 'check the key and try again'}")

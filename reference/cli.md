@@ -207,6 +207,16 @@ $BIN expand IDENTITY
 
 Pulls "people also viewed" profiles and listed employees out of a dossier you already paid for. Zero credits. Returns nothing (exit 3) on platforms that expose no lateral links.
 
+### `setup` — save the key
+
+```bash
+$BIN setup YOUR_KEY
+$BIN setup            # status + where the file lives
+$BIN setup --clear    # forget the saved file
+```
+
+Writes `~/.who-finder/key` (or `$WHO_FINDER_HOME/key`) at mode 0600. `export SCRAPECREATORS_API_KEY` still wins if both are set. The file is why a clone still works tomorrow. See [docs/key.md](../docs/key.md).
+
 ### `doctor` — health
 
 ```bash

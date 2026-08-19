@@ -3,6 +3,12 @@ from lib.emit import table
 from lib.which import resolve
 
 
+def test_which_getting_started_is_setup():
+    hit = resolve("how do i start")
+    assert hit["matched"] is True
+    assert hit["run"] == "setup"
+
+
 def test_which_hiring():
     hit = resolve("who is hiring for AI video")
     assert hit["matched"] is True

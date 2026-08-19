@@ -1,65 +1,34 @@
 # Sharing this with your team
 
-**who-finder** — describe who you're looking for, get back a ranked shortlist of real people with a page on each, written up as a document you can forward.
-
 Repo: **https://github.com/romaluev/who-finder**
 
-## The short version, for anyone
+Send them that link and this sentence:
 
-You don't run this yourself. Once it's set up with your AI assistant, you just ask in plain English:
+> Clone it, run `setup` with your own key, then ask your assistant. Guide: [docs/start.md](docs/start.md)
 
-> *"Find me the top 10 people building AI video tools and write it up as a PDF."*
-> *"Who's hiring for AI video editors?"*
-> *"Journalists covering generative video."*
-> *"Show me ten more."*
+They do **not** need the rest of any other workspace, and they must not use your API key.
 
-You get back a document: a summary of what it found, then a page on each person — who they are, how to reach them (only addresses they published), what you'd miss on a first scan, and why they're worth your time. It never shows you the same name twice, and it never invents a name, a number, or an email.
+## What they do
 
-## Setting it up (a few minutes, no programming)
+1. Clone — into `~/.cursor/skills/who-finder` (Cursor) or `~/.claude/skills/who-finder` (Claude), or any folder if they just want the CLI.
+2. Get their own key at [scrapecreators.com](https://scrapecreators.com).
+3. `./who-finder setup THEIR_KEY` (or the `python3 …/who_finder.py setup` form in the [start guide](docs/start.md)).
+4. Ask: *"Find me the top 10 people building AI video tools and write it up as a PDF."*
 
-You need two things.
+What they get back, what to type next: [docs/ask.md](docs/ask.md). Key problems: [docs/key.md](docs/key.md).
 
-**1. The skill.** Paste this into a terminal once:
+## Optional — only if you coordinate a team
 
-```bash
-git clone https://github.com/romaluev/who-finder ~/.cursor/skills/who-finder
-```
+**A shared seen-list** stops two people emailing the same lead. By default each person's history is their own. Point everyone at one file with `--db /shared/team-roster.sqlite`, or set `WHO_FINDER_HOME` to a synced folder. Without this, "new" means new *to you*.
 
-(Use `~/.claude/skills/who-finder` instead if your assistant is Claude.)
+**A shared definition of fit** keeps scoring consistent. Commit an `icp.json` and have people pass `--icp ./team-icp.json`. Seed existing customers first with `import known-customers.csv` so they never surface as fresh leads.
 
-**2. Your own key.** The searches are paid for with credits from a key you get at [scrapecreators.com](https://scrapecreators.com). Everyone uses their own — they're not shared. Once you have it:
-
-```bash
-export SCRAPECREATORS_API_KEY=your-key-here
-```
-
-That's it. To check it worked, this tells you in plain language whether you're ready:
-
-```bash
-python3 ~/.cursor/skills/who-finder/scripts/who_finder.py doctor
-```
-
-**Want to see it before you get a key?** This shows exactly what a search would do and cost, without spending anything:
-
-```bash
-python3 ~/.cursor/skills/who-finder/scripts/who_finder.py find "AI video agencies" --deep 10 --dry-run
-```
-
-## For the person rolling it out
-
-Everything below is optional and only matters if you're coordinating a team.
-
-**A shared seen-list stops two people emailing the same lead.** By default each person's history is their own. To share it, point everyone at one file with `--db /shared/team-roster.sqlite`, or set `WHO_FINDER_HOME` to a synced folder. Without this, "new" means new *to you*.
-
-**A shared definition of a good fit keeps everyone consistent.** Fit scoring is a JSON file; commit one and have people pass `--icp ./team-icp.json`. Seed a skip list of existing customers first with `import known-customers.csv` so they never surface as fresh leads.
-
-**Agents can learn the tool themselves.** `agent-context --agent` describes the whole CLI from live constants, and `which "how much will this cost"` maps a plain-English phrase to the right command — so nobody reads documentation before their first useful run.
+**Agents can learn the tool themselves.** `agent-context --agent` describes the whole CLI from live constants. Nobody has to read `reference/` before the first useful run.
 
 ## Don't send
 
 - your API key
-- the rest of the Higgsfield workspace
-- `creator-finder` — this replaced it
-- HubSpot / HeyReach exports, or anything CRM-shaped
+- another team's repo or CRM export
+- anything you would not want pasted into a shortlist
 
-This researches people and hands you a document. It doesn't message anyone, and it shouldn't be wired into a sending pipeline without a human in between.
+This researches people and hands you a document. It does not message anyone.

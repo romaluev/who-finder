@@ -220,7 +220,7 @@ def test_agent_context_describes_the_whole_cli(home, capsys):
     payload = _run(capsys, ["agent-context", "--agent"])
     r = payload["results"]
     assert r["primary_verb"] == "find"
-    assert {c["command"] for c in r["commands"]} >= {"find", "report", "enrich", "doctor"}
+    assert {c["command"] for c in r["commands"]} >= {"find", "report", "enrich", "doctor", "setup"}
     assert "8" in {str(k) for k in r["exit_codes"]}
     assert r["cost_model"]["cached_profile"] == 0
 
@@ -295,7 +295,7 @@ def test_no_arguments_teaches_instead_of_erroring(home, capsys):
 
 
 def test_help_words_reach_the_same_place(home, capsys):
-    for word in ("help", "start", "setup", "?"):
+    for word in ("help", "start", "guide", "?"):
         assert cli.main([word]) == 0
         assert "--dry-run" in capsys.readouterr().out
 
@@ -323,7 +323,8 @@ def test_doctor_prints_a_readable_card_for_humans(home, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert code == agentio.E_AUTH
     assert "NOT SET UP" in out
-    assert "export SCRAPECREATORS_API_KEY" in out
+    assert "setup YOUR_KEY" in out
+    assert "scrapecreators.com" in out
     assert not out.lstrip().startswith("{"), "humans should not be shown raw JSON"
 
 

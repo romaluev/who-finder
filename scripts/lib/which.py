@@ -4,7 +4,14 @@ from __future__ import annotations
 
 INDEX = (
     {
-        "needles": ("health", "doctor", "key", "credit", "broken", "setup", "install"),
+        "needles": ("setup", "install", "api key", "save key", "where do i put the key",
+                    "how do i start", "getting started", "first run"),
+        "run": "setup",
+        "note": "saves the key to a file so the next terminal still works. "
+                "get the key at https://scrapecreators.com",
+    },
+    {
+        "needles": ("health", "doctor", "credit", "broken"),
         "run": "doctor --agent",
         "note": "four-state: ready | skipped-unconfigured | auth-failed | error",
     },

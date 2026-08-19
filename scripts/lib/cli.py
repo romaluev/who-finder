@@ -22,14 +22,14 @@ import pathlib
 import sys
 from pathlib import Path
 
-from . import __version__, agentio, contacts, db, emit, enrich, icp, insights, notices, report, sources
+from . import __version__, agentio, auth, contacts, db, emit, enrich, icp, insights, notices, report, sources
 from .agentio import E_API, E_AUTH, E_BUDGET, E_CONFIG, E_NOTFOUND, E_USAGE
 from .identity import parse_id
 from .planner import detect_scenario, plan as make_plan
 from .scenarios import SCENARIOS, SOURCES
 from .which import resolve as which_resolve
 
-ENV_KEY = "SCRAPECREATORS_API_KEY"
+ENV_KEY = auth.ENV_KEY
 
 COMPACT_KEYS = (
     "novelty",
@@ -86,6 +86,7 @@ COMMAND_HELP = {
              "1/new profile, 0 discovery"),
     "enrich": ("dossier + ICP fit for stored entities", "1/entity, 0 cached"),
     "expand": ("similar profiles / employees out of a stored dossier", "0"),
+    "setup": ("save your API key so it survives a new terminal", "0"),
     "doctor": ("key, roster path, credits, four-state health", "0, or 1 with --probe"),
     "agent-context": ("machine-readable description of this whole CLI", "0"),
     "which": ("map a capability phrase to a command", "0"),
@@ -113,7 +114,7 @@ def _command_index() -> list[dict]:
 
 
 def _token() -> str:
-    return os.environ.get(ENV_KEY, "").strip()
+    return auth.token()
 
 
 def _emit(payload: dict, agent: bool, args: argparse.Namespace | None = None) -> int:
@@ -237,6 +238,76 @@ def _score_rows(conn, rows: list[dict], dossiers: dict[str, dict], cfg: dict, ts
     return full
 
 
+def cmd_setup(args: argparse.Namespace) -> int:
+    """Save a key to a file so the next terminal still works.
+
+    `export` is forgotten when the window closes. That is the usual reason a
+    clone looks broken the next morning. This writes ~/.who-finder/key (or
+    $WHO_FINDER_HOME/key) at mode 0600 and never prints the secret back.
+    """
+    if getattr(args, "clear", False):
+        gone = auth.clear()
+        payload = {
+            "meta": {"source": "who-finder", "version": __version__},
+            "table": "Removed the saved key." if gone else "No saved key file to remove.",
+            "results": {"cleared": gone, "path": str(auth.key_file())},
+        }
+        return _emit(payload, args.agent, args)
+
+    key = (args.key or "").strip()
+    if not key:
+        token, source = auth.read()
+        lines = [
+            "who-finder setup — one key, then you can ask.",
+            "",
+            f"  key file   {auth.key_file()}",
+            f"  now        {'set (' + source + ')' if token else 'not set yet'}",
+            "",
+            "Get a key at https://scrapecreators.com (your own, not a teammate's).",
+            "Then paste it once:",
+            f"  {_invocation()} setup YOUR_KEY",
+            "",
+            "After that, open a new terminal and run doctor — it should say READY.",
+            "The key stays on this machine. Do not commit it, do not Slack it.",
+        ]
+        return _emit(
+            {
+                "meta": {"source": "who-finder", "version": __version__},
+                "table": "\n".join(lines),
+                "results": {
+                    "key": "set" if token else "missing",
+                    "key_source": source,
+                    "path": str(auth.key_file()),
+                    "url": "https://scrapecreators.com",
+                },
+            },
+            args.agent, args,
+        )
+    try:
+        path = auth.save(key)
+    except ValueError as exc:
+        return _die(args, E_USAGE, str(exc),
+                    fix="get a key at https://scrapecreators.com and paste the whole thing")
+    lines = [
+        "Key saved. It will still be here the next time you open a terminal.",
+        f"  {path}",
+        "",
+        "Next:",
+        f"  {_invocation()} doctor",
+        f'  {_invocation()} find "founders of AI video tools" --deep 10 --dry-run',
+        "",
+        "Or just ask your assistant:  Find me the top 10 people building AI video tools.",
+    ]
+    return _emit(
+        {
+            "meta": {"source": "who-finder", "version": __version__},
+            "table": "\n".join(lines),
+            "results": {"saved": True, "path": str(path), "key_source": f"file:{path}"},
+        },
+        args.agent, args,
+    )
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     token = _token()
     path = Path(args.db) if args.db else db.default_db()
@@ -248,6 +319,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         "results": {
             "state": "skipped-unconfigured" if not token else "ready",
             "key": "set" if token else "missing",
+            "key_source": auth.read()[1],
             "env": ENV_KEY,
             "db": str(path),
             "db_exists": path.exists(),
@@ -266,7 +338,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     }
     if not token:
         payload["results"]["fix"] = (
-            f"export {ENV_KEY}=...  (recipient's own key from https://scrapecreators.com)"
+            f"who-finder setup YOUR_KEY   or   export {ENV_KEY}=...  "
+            "(your own key from https://scrapecreators.com)"
         )
         payload["results"]["api"] = "untested"
         payload["table"] = emit.doctor_card(payload["results"])
@@ -922,6 +995,8 @@ def cmd_agent_context(args: argparse.Namespace) -> int:
                 "key_present": bool(token),
                 "env": {"key": ENV_KEY, "home": "WHO_FINDER_HOME", "db": "WHO_FINDER_DB",
                         "icp": "WHO_FINDER_ICP"},
+                "key_file": str(auth.key_file()),
+                "key_source": auth.read()[1],
                 "paths": {
                     "db": str(db.default_db()),
                     "icp": str(icp_path),
@@ -1280,7 +1355,7 @@ def cmd_scenarios(args: argparse.Namespace) -> int:
 
 GLOBAL_FLAGS = ("agent", "db", "select", "deliver", "profile")
 
-HELP_WORDS = {"help", "start", "setup", "hello", "hi", "?", "-h", "--help", "usage", "guide"}
+HELP_WORDS = {"help", "start", "hello", "hi", "?", "-h", "--help", "usage", "guide"}
 
 
 VALUE_FLAGS = {"--db", "--select", "--deliver", "--profile", "--icp"}
@@ -1289,9 +1364,12 @@ VALUE_FLAGS = {"--db", "--select", "--deliver", "--profile", "--icp"}
 def _invocation() -> str:
     """How the caller actually reached us, so printed examples are copy-pasteable."""
     script = sys.argv[0] if sys.argv else ""
-    if "who_finder" not in script:  # imported, or run under a test harness
-        return "who-finder"
-    return f"python3 {script}"
+    name = Path(script).name
+    if name == "who-finder":
+        return script if script.startswith(("./", "/")) else "./who-finder"
+    if "who_finder" in script:
+        return f"python3 {script}"
+    return "who-finder"
 
 
 def _first_word(raw: list[str]) -> str:
@@ -1401,6 +1479,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="machine-readable description of this whole CLI")
     ac.add_argument("--icp", default=None)
     ac.set_defaults(fn=cmd_agent_context)
+
+    su = sub.add_parser("setup", parents=[shared],
+                        help="save your API key so it survives a new terminal")
+    su.add_argument("key", nargs="?", help="the key from scrapecreators.com")
+    su.add_argument("--clear", action="store_true", help="forget the saved key file")
+    su.set_defaults(fn=cmd_setup)
 
     pf = sub.add_parser("profile", parents=[shared], help="save/list/show/delete a flag set")
     pf.add_argument("action", choices=["save", "list", "show", "delete"])
