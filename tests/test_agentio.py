@@ -289,15 +289,15 @@ def test_unknown_profile_is_not_found(home, capsys):
 def test_no_arguments_teaches_instead_of_erroring(home, capsys):
     assert cli.main([]) == 0
     out = capsys.readouterr().out
-    assert "TRY THIS FIRST" in out
-    assert "--dry-run" in out, "the free, keyless path must be the first thing offered"
+    assert "you just ask" in out, "a non-technical reader should learn they can just ask"
+    assert "--dry-run" in out, "the free, keyless path must be offered"
     assert "scrapecreators.com" in out, "they cannot start without knowing where the key comes from"
 
 
 def test_help_words_reach_the_same_place(home, capsys):
     for word in ("help", "start", "setup", "?"):
         assert cli.main([word]) == 0
-        assert "TRY THIS FIRST" in capsys.readouterr().out
+        assert "--dry-run" in capsys.readouterr().out
 
 
 def test_a_typed_brief_is_redirected_to_find(home, capsys):

@@ -22,53 +22,41 @@ def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exi
     argument is missing, which tells someone who has never used this what they
     typed wrong but not what to type instead. This answers the second question.
     """
-    key_line = (
-        "  [x] API key      set"
+    key_lines = (
+        ["  2. A key     set — you're ready."]
         if key_set else
-        "  [ ] API key      not set — needed only for real searches\n"
-        "                   export SCRAPECREATORS_API_KEY=your-key\n"
-        "                   get one at https://scrapecreators.com"
+        ["  2. A key     not set yet. Get one at https://scrapecreators.com,",
+         "               then paste:  export SCRAPECREATORS_API_KEY=your-key"]
     )
-    roster = "already here" if db_exists else "created on your first search"
     return "\n".join([
-        f"who-finder v{__version__} — find people and companies from public profiles",
+        "who-finder — describe who you're looking for, get back a shortlist",
+        "of real people with a page on each, written up as a document you can send.",
         "",
-        "Describe who you are looking for in plain English. It works out what kind of",
-        "search that is, runs it, and tells you who is worth contacting and why.",
+        "You don't learn commands for this. If it's set up with your AI assistant,",
+        "you just ask, in plain English:",
         "",
-        "SETUP",
-        f"  [x] Python       {python}",
-        key_line,
-        f"  [ ] roster       {roster}",
-        f"                   {db_path}",
+        '    "Find me the top 10 people building AI video tools, as a PDF."',
         "",
-        "TRY THIS FIRST — free, no key needed, spends nothing",
-        f'  {invocation} find "founders of AI video tools" --deep 10 --dry-run',
+        "------------------------------------------------------------------------",
+        "Setting it up yourself? Two things, no programming needed:",
         "",
-        "  That prints the exact searches it would run and what they would cost,",
-        "  without running them. It is the safe way to see how this behaves.",
+        f"  1. Python    {python}  — already here, good.",
+        *key_lines,
         "",
-        "ONCE YOUR KEY IS SET",
-        f"  {invocation} doctor",
-        "      check the key works and see your credit balance",
-        f'  {invocation} find "founders of AI video tools" --deep 10',
-        "      the real thing — names, roles, audience size, and fit",
-        f'  {invocation} find "founders of AI video tools" --deep 10 --format md,pdf --out shortlist',
-        "      the same run, written up as a document you can send someone",
-        f"  {invocation} report",
-        "      show the last results again, free",
-        f"  {invocation} more --offset 10",
-        "      the next ten down the list, without paying to search again",
-        f"  {invocation} export --out shortlist.csv",
-        "      hand the shortlist to a human or a CRM",
+        "See it work before you have a key — free, spends nothing:",
+        f'    {invocation} find "founders of AI video tools" --deep 10 --dry-run',
         "",
-        "OTHER THINGS TO ASK",
-        f'  {invocation} which "how much will this cost"',
-        "      describe what you want in your own words and it names the command",
-        f"  {invocation} --help",
-        "      the full flag list",
+        "That prints the exact searches it would run and what they'd cost,",
+        "without running them.",
         "",
-        "It never sends email, never logs into LinkedIn, and never writes to a CRM.",
+        "Once your key is set:",
+        f"    {invocation} doctor",
+        "        confirm the key works and see your balance",
+        f'    {invocation} find "founders of AI video tools" --deep 10 --format md,pdf --out shortlist',
+        "        the real thing, written up as a document you can send",
+        "",
+        "It never sends email, never logs into LinkedIn, and never invents a name.",
+        f"Stuck? {invocation} help lists everything.",
     ])
 
 
