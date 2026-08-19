@@ -55,17 +55,17 @@ def test_findings_report_audience_and_masking():
         _d(3, ["ai"], audience=0, masked=True),
     ]
     rows = [
-        {"platform": "linkedin", "fit_band": "strong"},
-        {"platform": "linkedin", "fit_band": "possible"},
-        {"platform": "youtube", "fit_band": "unknown"},
+        {"id": "person/linkedin/1", "name": "Ada", "platform": "linkedin", "fit_band": "strong",
+         "fit_reasons": ["topic match: ai (+18)"]},
+        {"id": "person/linkedin/2", "name": "Bea", "platform": "linkedin", "fit_band": "possible"},
+        {"id": "person/linkedin/3", "name": "Cee", "platform": "linkedin", "fit_band": "unknown"},
     ]
     out = " ".join(
         insights.findings(rows, dossiers, scenario="people", topic="ai", n_new=3, n_known=0)
     )
-    assert "3 entities" in out
+    assert "3 people" in out or "3 person" in out
     assert "median" in out
-    assert "1 LinkedIn profile hides job history" in out
-    assert "1 strong" in out
+    assert "hides job history" in out
 
 
 def test_findings_use_singular_grammar_for_one_row():
@@ -79,7 +79,8 @@ def test_findings_use_singular_grammar_for_one_row():
             n_known=0,
         )
     )
-    assert "1 entity " in out
+    assert "1 person" in out
+    assert "1 people" not in out
     assert "1 entities" not in out
 
 

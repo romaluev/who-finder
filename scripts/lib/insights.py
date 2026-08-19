@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from collections import Counter
 
-from .util import CLUSTER_MIN_LEN, human, plural, to_int
+from . import portrait
+from .util import CLUSTER_MIN_LEN, plural, to_int
 
 # Below this many enriched profiles, shared vocabulary is coincidence, not a theme.
 CLUSTER_MIN_DOCS = 4
@@ -31,14 +32,6 @@ def coverage(source_status: list[dict]) -> list[str]:
         else:
             out.append(f"{label} ERROR")
     return out
-
-
-def _median(nums: list[int]) -> int:
-    vals = sorted(n for n in nums if n > 0)
-    if not vals:
-        return 0
-    mid = len(vals) // 2
-    return vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) // 2
 
 
 def clusters(dossiers: list[dict], min_members: int = 2, limit: int = 5) -> list[dict]:
@@ -96,61 +89,16 @@ def findings(
             ]
         return ["No entities matched. Widen freshness or drop a source filter."]
 
-    plats = Counter(r.get("platform") for r in rows)
-    plat_str = ", ".join(f"{p} {c}" for p, c in plats.most_common(4))
-    out.append(
-        f"{len(rows)} {plural(len(rows), 'entity', 'entities')} "
-        f"({n_new} new, {n_known} already in roster) across {plat_str}."
-    )
-
-    enriched = [d for d in dossiers if d.get("enriched")]
-    if enriched:
-        auds = [to_int(d.get("audience")) for d in enriched]
-        sized = [a for a in auds if a > 0]
-        if sized:
-            kinds = Counter(d.get("audience_kind") for d in enriched if to_int(d.get("audience")))
-            dominant = kinds.most_common(1)[0][0] if kinds else ""
-            label = "Headcount" if dominant == "employees" else "Audience"
-            out.append(
-                f"{label}: median {human(_median(sized))}, largest {human(max(sized))}, "
-                f"{len(sized)}/{len(enriched)} enriched {plural(len(enriched), 'profile')} "
-                "report a number."
-            )
-        masked = [d for d in enriched if d.get("masked")]
-        if masked:
-            n = len(masked)
-            out.append(
-                f"{n} LinkedIn {plural(n, 'profile')} {plural(n, 'hides', 'hide')} job history "
-                "publicly — that role line comes from the search snippet, not the profile."
-            )
-
-    bands = Counter(r.get("fit_band") for r in rows if r.get("fit_band"))
-    if bands:
-        parts = [f"{bands[b]} {b}" for b in ("strong", "possible", "weak", "off", "unknown") if bands.get(b)]
-        out.append("ICP fit: " + ", ".join(parts) + ".")
-
-    sig = Counter()
-    for d in dossiers:
-        sig.update(s for s in (d.get("signals") or []) if s not in {"posting", "small-audience", "mid-audience", "large-audience"})
-    notable = [f"{c} {s}" for s, c in sig.most_common(5) if c > 0]
-    if notable:
-        out.append("Signals: " + ", ".join(notable) + ".")
-
-    themes = clusters(dossiers)
-    if themes:
-        out.append(
-            "Recurring themes: "
-            + ", ".join(f"{t['theme']} ({t['n']})" for t in themes)
-            + "."
-        )
-
-    unenriched = [d for d in dossiers if not d.get("enriched")]
-    if unenriched:
-        n = len(unenriched)
-        out.append(
-            f"{n} {plural(n, 'row')} {plural(n, 'is', 'are')} discovery-only "
-            "(no profile endpoint, or the fetch failed); their fit is provisional."
-        )
+    # Attach ids so landscape can join rows to dossiers even when the caller
+    # built dossiers without going through report._ident.
+    ds = []
+    for i, d in enumerate(dossiers):
+        d = dict(d)
+        if not d.get("id") and i < len(rows):
+            r = rows[i]
+            d["id"] = r.get("id") or f"{r.get('kind')}/{r.get('platform')}/{r.get('handle')}"
+        ds.append(d)
+    out.extend(portrait.landscape(rows, ds, topic=topic, n_new=n_new, n_known=n_known))
     return out
 
 

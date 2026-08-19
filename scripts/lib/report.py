@@ -18,7 +18,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-from . import __version__, pdf
+from . import __version__, pdf, portrait
 from .util import human, to_int
 
 BAND_LABEL = {
@@ -66,7 +66,7 @@ def build(
                                f" · {scenario} · {now}",
                    "meta": [
                        ("In this report", f"the {rank_from} of {found} found"),
-                       ("Ranked by", "ICP fit, then audience reach, then novelty"),
+                       ("Ranked by", "how well they fit, then audience, then whether they're new"),
                        ("Fit rules", icp_name),
                        ("New names", f"{n_new} not seen before, {n_known} already in the roster"),
                        ("Cost", f"{credits} credits" if credits else "0 credits (from stored data)"),
@@ -118,32 +118,29 @@ def build(
     blocks.append({"t": "pagebreak"})
     blocks.append({"t": "h1", "text": "How this was researched"})
     blocks.append({"t": "p", "text":
-                   "Every name here came from a public profile returned by one of the "
-                   "searches below. Nothing was inferred, and no private or logged-in "
-                   "source was used."})
+                   "Every name here came from a public profile. Nothing was guessed, "
+                   "and nothing behind a login was used."})
     if frames:
         blocks.append({"t": "h2", "text": "How the question was asked"})
         blocks.append({"t": "p", "text":
-                       "The same request was framed several ways, because one phrasing "
+                       "The same request was asked several ways, because one phrasing "
                        "only reaches the people who describe themselves that way."})
         for f in frames:
-            blocks.append({"t": "bullet", "text": f})
+            blocks.append({"t": "bullet", "text": _plain_frame(f)})
     if steps:
-        blocks.append({"t": "h2", "text": "Searches run"})
+        blocks.append({"t": "h2", "text": "Where we looked"})
         for s in steps:
-            blocks.append({"t": "mono", "text": s})
+            blocks.append({"t": "bullet", "text": portrait.english_step(s)})
     if source_status:
-        blocks.append({"t": "h2", "text": "Source coverage"})
-        blocks.append({"t": "table", "cols": ["Source", "Result", "Rows"],
-                       "rows": [[f"{s.get('source')}:{s.get('label')}",
-                                 s.get("state", "?"), str(s.get("n", 0))]
-                                for s in source_status]})
-    blocks.append({"t": "h2", "text": "Reading the fit score"})
+        blocks.append({"t": "h2", "text": "What each search returned"})
+        blocks.append({"t": "table", "cols": ["Where", "What happened", "People"],
+                       "rows": [portrait.english_source_row(s) for s in source_status]})
+    blocks.append({"t": "h2", "text": "How fit is scored"})
     blocks.append({"t": "p", "text":
-                   "Fit is scored against a rules file you control, not a model's opinion. "
-                   "Every point that moved a score is listed on that person's entry. "
-                   "Anyone whose profile could not be fetched is capped at POSSIBLE, however "
-                   "good the search snippet looked."})
+                   "Fit is scored against a rules file you control, not an opinion. "
+                   "Every reason is listed on that person's page in plain language. "
+                   "Anyone whose profile could not be fetched is marked unverified, "
+                   "however good the search snippet looked."})
     blocks.append({"t": "footer", "text":
                    f"who-finder v{__version__} · generated {now} · public data only"})
     return blocks
@@ -191,55 +188,84 @@ def _rank_row(i: int, r: dict, dossiers: dict) -> list[str]:
     ]
 
 
+def _plain_frame(raw: str) -> str:
+    """`literal: ai video ads — the topic exactly as asked` stays readable;
+    a bare internal label gets translated."""
+    s = str(raw or "")
+    if ":" in s and " — " in s:
+        label, _, rest = s.partition(":")
+        topic, _, why = rest.partition(" — ")
+        nice = {"literal": "Exactly as asked", "exact": "As one phrase",
+                "broad": "Without the leading qualifier",
+                "given": "A phrasing you supplied",
+                "category": "Paired with what we are looking for"}.get(label.strip(), label.strip())
+        return f"**{nice}** — {topic.strip()}" + (f" ({why.strip()})" if why.strip() else "")
+    return portrait.english_step(s)
+
+
 def _person(i: int, r: dict, dossiers: dict, hits: list[dict],
             found_by: list[str] | None = None) -> dict:
     ident = _ident(r)
     d = dossiers.get(ident, {})
-    aud = to_int(d.get("audience") or r.get("audience"))
+    peers = list(dossiers.values())
     fields: list[tuple] = []
 
-    role = d.get("headline") or r.get("headline")
-    if role:
-        src = d.get("headline_source") or ""
-        fields.append(("Role", role + (f"  [{src}]" if src else "")))
-    else:
-        fields.append(("Role", "not public"))
-    if aud:
-        kind = d.get("audience_kind") or r.get("audience_kind") or "followers"
-        fields.append(("Audience", f"{human(aud)} {kind}"))
-    if d.get("location"):
-        fields.append(("Based in", d["location"]))
-    if d.get("bio"):
-        fields.append(("About", d["bio"][:600]))
+    lede = portrait.lede(r, d, peers=peers)
+    if lede:
+        fields.append(("Who they are", lede))
 
-    reasons = r.get("fit_reasons") or d.get("fit_reasons") or []
-    if reasons:
-        fields.append(("Why they fit", " · ".join(reasons)))
+    # Role / location / audience already live in the lede. Repeat them only
+    # when the lede could not be built, so the card is never an empty name.
+    if not lede:
+        role = portrait._role(d, r)
+        if role:
+            fields.append(("Role", role))
+        aud = portrait.audience_detail(d, r)
+        if aud:
+            fields.append(("Audience", aud))
+        if d.get("location"):
+            fields.append(("Based in", d["location"]))
+    else:
+        extra_aud = portrait.audience_detail(d, r)
+        # Keep the richer audience line (videos, views, connections) when the
+        # lede only had the headline number.
+        if extra_aud and " · " in extra_aud:
+            fields.append(("Audience", extra_aud))
+
+    why = portrait.why_english(r, d)
+    if why:
+        fields.append(("Why they fit", " · ".join(why)))
     gaps = r.get("fit_gaps") or []
     if gaps:
-        fields.append(("What is missing", " · ".join(gaps)))
-    sig = d.get("signals") or r.get("signals") or []
-    if sig:
-        fields.append(("Signals", ", ".join(sig)))
-    topics = d.get("topics") or []
-    if topics:
-        fields.append(("Topics", ", ".join(topics[:8])))
+        fields.append(("What we could not check", " · ".join(gaps)))
 
-    recent = d.get("recent") or []
-    if recent:
-        fields.append(("Recently", _first_text(recent)))
+    hook = portrait.angle(r, d, found_by)
+    if hook:
+        fields.append(("Why reach out", hook))
+
+    posts = portrait.recent_lines(d)
+    if posts:
+        fields.append(("What they've been saying", " · ".join(posts)))
     elif r.get("sample"):
-        fields.append(("Recently", str(r["sample"])))
+        fields.append(("What they've been saying", str(r["sample"])))
+
+    company = portrait.company_lines(d)
+    if company:
+        fields.append(("The company", " · ".join(company)))
+    people = portrait.colleagues(d)
+    if people:
+        fields.append(("People there", " · ".join(people)))
+    similar = portrait.similar_names(d)
+    if similar:
+        fields.append(("Similar profiles", " · ".join(similar)))
 
     if found_by and len(found_by) > 1:
-        # Independent phrasings converging on the same person is corroboration
-        # the fit score cannot see, so it is called out rather than left implicit.
-        fields.append(("Corroboration",
-                       f"surfaced by {len(found_by)} different framings of the search"))
+        fields.append(("Found how many ways",
+                       f"{len(found_by)} different phrasings of the search all surfaced them"))
 
-    if not r.get("enriched"):
+    if not (r.get("enriched") or d.get("enriched")):
         fields.append(("Note", "Profile could not be fetched, so this entry rests on the "
-                               "search result alone and is capped at POSSIBLE."))
+                               "search result alone and is marked unverified."))
 
     links = [r.get("url") or d.get("url")] + list(d.get("links") or [])
     links = [l for l in dict.fromkeys(links) if l]
@@ -248,6 +274,7 @@ def _person(i: int, r: dict, dossiers: dict, hits: list[dict],
         "t": "person",
         "rank": i,
         "name": r.get("name") or r.get("handle") or ident,
+        "role": portrait._role(d, r),
         "id": ident,
         "band": r.get("fit_band") or "unknown",
         "priority": r.get("priority"),
@@ -336,7 +363,7 @@ def to_markdown(blocks: list[dict]) -> str:
                 head.append(f"priority {int(b['priority'])}")
             if b.get("fit_score") is not None:
                 head.append(f"fit {int(b['fit_score'])}/100")
-            head.append(f"`{b['id']}`")
+            head.append(_human_id(b["id"]))
             out += [" · ".join(head), ""]
             out += [f"- **{k}:** {_md_cell(v)}" for k, v in b["fields"]]
             if b["links"]:
@@ -357,6 +384,16 @@ def to_markdown(blocks: list[dict]) -> str:
 
 def _md_cell(v) -> str:
     return str(v).replace("|", "\\|").replace("\n", " ")
+
+
+def _human_id(ident: str) -> str:
+    """`person/linkedin/jane-doe` -> `LinkedIn · jane-doe` — the kind is implied."""
+    parts = str(ident or "").split("/")
+    if len(parts) >= 3:
+        plat = {"linkedin": "LinkedIn", "youtube": "YouTube", "tiktok": "TikTok",
+                "instagram": "Instagram", "x": "X"}.get(parts[1], parts[1])
+        return f"{plat} · {parts[2]}"
+    return ident
 
 
 def _short(url: str) -> str:
@@ -598,7 +635,7 @@ def _table_html(blk: dict) -> str:
 
 def _person_html(p: dict) -> str:
     band = p["band"]
-    role = next((v for k, v in p["fields"] if k == "Role"), "")
+    role = p.get("role") or next((v for k, v in p["fields"] if k == "Role"), "")
     fields = "".join(f"<dt>{_e(k)}</dt><dd>{_bold(str(v))}</dd>"
                      for k, v in p["fields"] if k != "Role")
     # Links and evidence are rows of the same definition list as everything
@@ -621,7 +658,7 @@ def _person_html(p: dict) -> str:
         f'<span class="rank">{p["rank"]}</span>'
         f'<div class="who"><h4>{_e(p["name"])}</h4>'
         + (f'<div class="role">{_e(role)}</div>' if role else "")
-        + f'<div class="role" style="font-size:.74rem">{_e(p["id"])}{pri}</div></div>'
+        + f'<div class="role" style="font-size:.74rem">{_e(_human_id(p["id"]))}{pri}</div></div>'
         f'<div class="fitbox"><div class="score">{score}<span class="of">/100</span></div>'
         f'<span class="badge {band}">{_e(BAND_LABEL.get(band, band))}</span></div>'
         f'</header><dl class="f">{fields}</dl></section>'
@@ -816,11 +853,11 @@ def _pdf_person(c: pdf.Canvas, p: dict) -> None:
     c.page.rect(c.w - c.margin - chip_w, top - 32, chip_w, 11, accent)
     c.page.text(c.w - c.margin - chip_w + 4.5, top - 29, pdf.sanitize(label), 6.6, True, (1, 1, 1))
 
-    role = next((v for k, v in p["fields"] if k == "Role"), "")
+    role = p.get("role") or next((v for k, v in p["fields"] if k == "Role"), "")
     c.y = top - 32
     if role:
         c.page.text(name_x, c.y, pdf.sanitize(_plain(str(role)))[:90], 8.6, False, MUTED)
-    sub = p["id"] + (f"  ·  priority {int(p['priority'])}" if p.get("priority") is not None else "")
+    sub = _human_id(p["id"]) + (f"  ·  priority {int(p['priority'])}" if p.get("priority") is not None else "")
     c.y -= 12
     c.page.text(name_x, c.y, pdf.sanitize(sub), 7.4, False, FAINT)
     c.y -= 6

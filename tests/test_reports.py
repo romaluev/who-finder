@@ -123,7 +123,9 @@ def test_a_continued_report_keeps_the_original_rank_numbers():
 
 def test_the_method_section_records_how_the_question_was_reframed():
     md = report.to_markdown(blocks())
-    assert "How the question was asked" in md and "literal: ai video ads" in md
+    assert "How the question was asked" in md
+    assert "ai video ads" in md
+    assert "Exactly as asked" in md or "literal" in md
 
 
 def test_html_is_a_standalone_file_with_no_external_requests():
@@ -180,7 +182,7 @@ def test_a_theme_section_appears_when_there_are_themes():
 
 def test_corroboration_is_reported_when_several_framings_agree():
     md = report.to_markdown(blocks(found_by={"person/linkedin/jane": ["q1", "q2", "q3"]}))
-    assert "surfaced by 3 different framings" in md
+    assert "3 different phrasings" in md
 
 
 def test_one_framing_is_not_dressed_up_as_corroboration():
