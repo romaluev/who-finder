@@ -165,16 +165,18 @@ class Canvas:
             self.space(gap)
 
     def label(self, key: str, value: str, *, key_w: float = 52.0, size: float = 9.0,
-              key_rgb: tuple = (0.45, 0.47, 0.52), val_rgb: tuple = (0.1, 0.1, 0.12)) -> None:
+              key_rgb: tuple = (0.45, 0.47, 0.52), val_rgb: tuple = (0.1, 0.1, 0.12),
+              x: float | None = None) -> None:
         """Two-column key/value row, value wrapping under itself."""
+        x0 = self.margin if x is None else x
         lh = size * 1.45
-        lines = wrap(sanitize(value), size, self.col - key_w, False)
+        lines = wrap(sanitize(value), size, self.w - self.margin - x0 - key_w, False)
         self.need(lh * len(lines))
         for i, line in enumerate(lines):
             self.y -= lh
             if i == 0:
-                self.page.text(self.margin, self.y, sanitize(key), size, False, key_rgb)
-            self.page.text(self.margin + key_w, self.y, line, size, False, val_rgb)
+                self.page.text(x0, self.y, sanitize(key), size, False, key_rgb)
+            self.page.text(x0 + key_w, self.y, line, size, False, val_rgb)
 
     def rule(self, *, gap: float = 6.0, rgb: tuple = (0.85, 0.86, 0.89)) -> None:
         self.need(gap * 2)

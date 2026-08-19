@@ -379,67 +379,142 @@ def _short_query(q: str) -> str:
 # HTML
 # --------------------------------------------------------------------------
 
-CSS = """
-:root{--ink:#14161a;--muted:#6b7280;--line:#e6e8ec;--bg:#fff;--accent:#1e40af;--soft:#f7f8fa}
+# The whole design is self-contained: system fonts only, no fetched assets, and
+# a print stylesheet that strips the chrome so the document survives being
+# printed to PDF from a browser. The look is an editorial dossier — a dark
+# masthead, a display serif for the title against a grotesque body, hairline
+# rules, tabular numerals, and fit as the single accent colour.
+CSS = r"""
+:root{
+ --ink:#16130e; --body:#3d382f; --muted:#8a8272; --faint:#b3ab99;
+ --line:#e4ddcd; --rule:#cdc4ae; --paper:#fbf9f3; --card:#fffdf8;
+ --dark:#14110b; --dark-ink:#efe9db; --dark-mut:#9a917c;
+ --accent:#1c4fd6;
+ --strong:#1a7a4a; --possible:#a06a00; --weak:#7c7462; --off:#a83c2a;
+ --disp:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+ --grot:"Avenir Next","Helvetica Neue",Helvetica,Arial,sans-serif;
+ --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--soft);color:var(--ink);
- font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
- -webkit-font-smoothing:antialiased}
-.sheet{max-width:52rem;margin:0 auto;background:var(--bg);padding:4rem 3.5rem 5rem;
- box-shadow:0 1px 3px rgba(0,0,0,.06),0 12px 40px rgba(0,0,0,.05)}
-h1.cover{font-size:2.2rem;line-height:1.15;letter-spacing:-.02em;margin:0 0 .4rem;font-weight:700}
-.sub{color:var(--muted);font-size:1rem;margin-bottom:2rem}
-h2{font-size:1.35rem;letter-spacing:-.01em;margin:2.8rem 0 .9rem;padding-top:1.4rem;
- border-top:1px solid var(--line);font-weight:650}
-h3{font-size:.82rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
- margin:1.8rem 0 .6rem;font-weight:650}
-p{margin:.6rem 0}
-ul{margin:.5rem 0 1rem;padding-left:1.1rem}
-li{margin:.3rem 0}
-table{border-collapse:collapse;width:100%;margin:.8rem 0 1.4rem;font-size:.9rem}
-th{text-align:left;font-weight:600;color:var(--muted);font-size:.72rem;text-transform:uppercase;
- letter-spacing:.07em;border-bottom:1px solid var(--line);padding:.5rem .6rem .5rem 0}
-td{padding:.55rem .6rem .55rem 0;border-bottom:1px solid var(--line);vertical-align:top}
-tr:last-child td{border-bottom:none}
-.meta{display:grid;grid-template-columns:auto 1fr;gap:.35rem 1.4rem;font-size:.9rem;
- padding:1.1rem 1.3rem;background:var(--soft);border-radius:10px;margin-bottom:1rem}
-.meta dt{color:var(--muted)}
-.meta dd{margin:0}
-.note{background:#fffbeb;border-left:3px solid #f0b429;padding:.85rem 1.1rem;
- border-radius:0 8px 8px 0;font-size:.9rem;margin:1rem 0;color:#5c4708}
-code,.mono{font:.83rem/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
- background:var(--soft);padding:.15rem .4rem;border-radius:5px;color:#374151}
-.mono{display:block;padding:.45rem .7rem;margin:.25rem 0;word-break:break-all}
-.person{border:1px solid var(--line);border-radius:14px;padding:1.5rem 1.6rem;margin:1.1rem 0;
- background:var(--bg);break-inside:avoid;page-break-inside:avoid}
-.person header{display:flex;align-items:baseline;gap:.7rem;flex-wrap:wrap;margin-bottom:.2rem}
-.person h4{font-size:1.18rem;margin:0;font-weight:650;letter-spacing:-.01em}
-.rank{color:var(--muted);font-variant-numeric:tabular-nums;font-weight:600}
-.badge{font-size:.68rem;font-weight:700;letter-spacing:.06em;padding:.2rem .5rem;
- border-radius:20px;color:#fff;white-space:nowrap}
-.scores{color:var(--muted);font-size:.82rem;margin-bottom:.9rem;font-variant-numeric:tabular-nums}
-dl.f{display:grid;grid-template-columns:8.5rem 1fr;gap:.45rem 1rem;margin:0;font-size:.92rem}
-dl.f dt{color:var(--muted);font-size:.8rem;padding-top:.1rem}
-dl.f dd{margin:0}
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-.links a{margin-right:.7rem;font-size:.85rem;word-break:break-all}
-footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--line);
- color:var(--muted);font-size:.8rem}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--body);
+ font:16px/1.62 var(--grot);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.sheet{max-width:46rem;margin:0 auto;padding:0 1.5rem 6rem}
+
+/* ---- masthead -------------------------------------------------------- */
+.masthead{background:var(--dark);color:var(--dark-ink);padding:3.4rem 0 2.8rem;
+ margin:0 0 0;position:relative}
+.masthead::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;
+ background:linear-gradient(90deg,var(--accent) 0 34%,var(--strong) 34% 67%,var(--possible) 67% 100%)}
+.masthead .inner{max-width:46rem;margin:0 auto;padding:0 1.5rem}
+.kicker{font:600 .68rem/1 var(--grot);letter-spacing:.24em;text-transform:uppercase;
+ color:var(--dark-mut);display:flex;justify-content:space-between;gap:1rem;margin-bottom:1.6rem}
+.kicker b{color:var(--dark-ink);font-weight:600}
+h1.cover{font:400 clamp(2rem,5.2vw,3rem)/1.08 var(--disp);letter-spacing:-.015em;
+ color:var(--dark-ink);margin:0 0 1rem}
+.sub{color:var(--dark-mut);font-size:.95rem;max-width:34rem;line-height:1.5}
+.cover-meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+ gap:1.4rem 2rem;margin-top:2.2rem;padding-top:1.6rem;border-top:1px solid #2c2718}
+.cover-meta .m{min-width:0}
+.cover-meta .k{font:600 .6rem/1 var(--grot);letter-spacing:.18em;text-transform:uppercase;
+ color:var(--dark-mut);margin-bottom:.4rem}
+.cover-meta .v{font-size:.86rem;color:var(--dark-ink);line-height:1.4}
+
+/* ---- sections -------------------------------------------------------- */
+h2{font:400 1.5rem/1.2 var(--disp);letter-spacing:-.01em;color:var(--ink);
+ margin:3.2rem 0 1rem;display:flex;align-items:baseline;gap:.8rem}
+h2::before{content:attr(data-n);font:600 .72rem/1 var(--grot);letter-spacing:.1em;
+ color:var(--accent);border-bottom:2px solid var(--accent);padding-bottom:.15rem}
+h3{font:600 .68rem/1 var(--grot);letter-spacing:.16em;text-transform:uppercase;
+ color:var(--muted);margin:2rem 0 .8rem}
+p{margin:.7rem 0;max-width:40rem}
+ul{margin:.6rem 0 1.1rem;padding-left:1.15rem}
+li{margin:.4rem 0;padding-left:.2rem}
+li::marker{color:var(--accent)}
+.note{background:#f6efdd;border-left:3px solid var(--possible);padding:.9rem 1.1rem;
+ font-size:.88rem;margin:1.2rem 0;color:#6b5410;border-radius:0 4px 4px 0}
+code,.mono{font:.8rem/1.5 var(--mono);background:#efe9da;padding:.12rem .38rem;
+ border-radius:3px;color:#4a4436}
+.mono{display:block;padding:.5rem .8rem;margin:.3rem 0;word-break:break-all;
+ border-left:2px solid var(--rule)}
+
+/* ---- at a glance ------------------------------------------------------ */
+.meta{list-style:none;margin:1rem 0;padding:0;display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:0;border-top:1px solid var(--rule)}
+.meta .m{padding:.9rem 1.2rem .9rem 0;border-bottom:1px solid var(--line)}
+.meta .k{font:600 .6rem/1 var(--grot);letter-spacing:.16em;text-transform:uppercase;
+ color:var(--muted);margin-bottom:.35rem}
+.meta .v{font-size:.92rem;color:var(--ink);line-height:1.35}
+
+/* ---- ranking table ---------------------------------------------------- */
+table{border-collapse:collapse;width:100%;margin:1rem 0 1.6rem;font-size:.9rem}
+thead th{font:600 .62rem/1 var(--grot);letter-spacing:.12em;text-transform:uppercase;
+ color:var(--muted);text-align:left;padding:.6rem .8rem .6rem 0;border-bottom:2px solid var(--ink)}
+tbody td{padding:.7rem .8rem .7rem 0;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+td.rk{font:600 .95rem/1 var(--grot);color:var(--faint);font-variant-numeric:tabular-nums;width:2rem}
+td.nm{font-weight:600;color:var(--ink)}
+td.nm small{display:block;font-weight:400;color:var(--muted);font-size:.78rem;margin-top:.1rem}
+td.num{font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+td .fit{font:600 .62rem/1 var(--grot);letter-spacing:.08em;text-transform:uppercase;
+ padding:.28rem .5rem;border-radius:3px;white-space:nowrap}
+.fit.strong{color:var(--strong);background:#e3f0e8}
+.fit.possible{color:var(--possible);background:#f4ecd6}
+.fit.weak{color:var(--weak);background:#eceadf}
+.fit.off{color:var(--off);background:#f3e2dc}
+.fit.unknown{color:var(--weak);background:#eceadf}
+
+/* ---- person cards ------------------------------------------------------ */
+.person{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--ink);
+ padding:1.6rem 1.7rem 1.5rem;margin:1.3rem 0;break-inside:avoid;page-break-inside:avoid;
+ box-shadow:0 1px 2px rgba(22,19,14,.04)}
+.person header{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1rem;
+ padding-bottom:1rem;border-bottom:1px solid var(--line)}
+.person .rank{font:400 1.9rem/1 var(--disp);color:var(--faint);min-width:2.4rem;
+ font-variant-numeric:tabular-nums}
+.person .who{flex:1;min-width:0}
+.person h4{font:400 1.35rem/1.15 var(--disp);color:var(--ink);margin:0 0 .3rem;letter-spacing:-.01em}
+.person .role{font-size:.88rem;color:var(--muted)}
+.person .fitbox{text-align:right;flex-shrink:0}
+.person .fitbox .score{font:400 1.5rem/1 var(--disp);font-variant-numeric:tabular-nums}
+.person .fitbox .of{font-size:.66rem;color:var(--muted);letter-spacing:.06em}
+.badge{display:inline-block;font:600 .6rem/1 var(--grot);letter-spacing:.1em;text-transform:uppercase;
+ padding:.32rem .55rem;border-radius:3px;margin-top:.4rem}
+.badge.strong{color:#fff;background:var(--strong)}
+.badge.possible{color:#fff;background:var(--possible)}
+.badge.weak{color:#fff;background:var(--weak)}
+.badge.off{color:#fff;background:var(--off)}
+.badge.unknown{color:#fff;background:var(--weak)}
+dl.f{display:grid;grid-template-columns:7.5rem 1fr;gap:.5rem 1.2rem;margin:0;font-size:.9rem}
+dl.f dt{font:600 .62rem/1.5 var(--grot);letter-spacing:.1em;text-transform:uppercase;
+ color:var(--muted);padding-top:.15rem}
+dl.f dd{margin:0;color:var(--body);line-height:1.5}
+dl.f dd strong{color:var(--ink);font-weight:600}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+a:hover{border-bottom-color:var(--accent)}
+.links a{margin-right:.9rem;font-size:.84rem;word-break:break-all;border-bottom:1px solid var(--rule)}
+.links a:hover{border-bottom-color:var(--accent)}
+footer{margin-top:3.5rem;padding-top:1.4rem;border-top:2px solid var(--ink);
+ color:var(--muted);font-size:.78rem;display:flex;justify-content:space-between;gap:1rem}
+footer .brand{font:600 .62rem/1.5 var(--grot);letter-spacing:.2em;text-transform:uppercase;color:var(--ink)}
+
 @media print{
  body{background:#fff}
- .sheet{box-shadow:none;max-width:none;padding:0;margin:0}
+ .sheet{max-width:none;padding:0}
+ .masthead{margin:0 0 1.5rem}
  .pagebreak{page-break-before:always}
  h2{page-break-after:avoid}
- a{color:var(--ink)}
+ .person{box-shadow:none}
+ a{color:var(--ink);border-bottom:none}
 }
-@page{margin:18mm 16mm}
+@page{margin:16mm 15mm}
 """
 
 
 def to_html(blocks: list[dict], *, title: str = "who-finder report") -> str:
     b: list[str] = []
     pending: list[str] = []
+    section = 0
 
     def flush() -> None:
         # Consecutive bullets are one list. Emitting a <ul> per bullet gives
@@ -455,12 +530,19 @@ def to_html(blocks: list[dict], *, title: str = "who-finder report") -> str:
             continue
         flush()
         if t == "cover":
-            b.append(f'<h1 class="cover">{_e(blk["title"])}</h1>')
-            b.append(f'<div class="sub">{_e(blk["subtitle"])}</div>')
-            b.append('<dl class="meta">' + "".join(
-                f"<dt>{_e(k)}</dt><dd>{_e(v)}</dd>" for k, v in blk["meta"]) + "</dl>")
+            b.append(
+                '<div class="masthead"><div class="inner">'
+                '<div class="kicker"><b>who-finder</b><span>research dossier</span></div>'
+                f'<h1 class="cover">{_e(blk["title"])}</h1>'
+                f'<div class="sub">{_e(blk["subtitle"])}</div>'
+                '<div class="cover-meta">'
+                + "".join(f'<div class="m"><div class="k">{_e(k)}</div>'
+                          f'<div class="v">{_e(v)}</div></div>' for k, v in blk["meta"])
+                + "</div></div></div>"
+            )
         elif t == "h1":
-            b.append(f"<h2>{_e(blk['text'])}</h2>")
+            section += 1
+            b.append(f'<h2 data-n="{section:02d}">{_e(blk["text"])}</h2>')
         elif t == "h2":
             b.append(f"<h3>{_e(blk['text'])}</h3>")
         elif t == "p":
@@ -470,17 +552,16 @@ def to_html(blocks: list[dict], *, title: str = "who-finder report") -> str:
         elif t == "mono":
             b.append(f'<span class="mono">{_e(blk["text"])}</span>')
         elif t == "kv":
-            b.append('<dl class="meta">' + "".join(
-                f"<dt>{_e(k)}</dt><dd>{_e(v)}</dd>" for k, v in blk["rows"]) + "</dl>")
+            b.append('<div class="meta">' + "".join(
+                f'<div class="m"><div class="k">{_e(k)}</div><div class="v">{_e(v)}</div></div>'
+                for k, v in blk["rows"]) + "</div>")
         elif t == "table":
-            head = "".join(f"<th>{_e(c)}</th>" for c in blk["cols"])
-            body = "".join("<tr>" + "".join(f"<td>{_e(c)}</td>" for c in row) + "</tr>"
-                           for row in blk["rows"])
-            b.append(f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>")
+            b.append(_table_html(blk))
         elif t == "person":
             b.append(_person_html(blk))
         elif t == "footer":
-            b.append(f"<footer>{_e(blk['text'])}</footer>")
+            b.append(f'<footer><span class="brand">who-finder</span>'
+                     f'<span>{_e(blk["text"])}</span></footer>')
         elif t == "pagebreak":
             b.append('<div class="pagebreak"></div>')
     flush()
@@ -492,15 +573,34 @@ def to_html(blocks: list[dict], *, title: str = "who-finder report") -> str:
     )
 
 
+def _table_html(blk: dict) -> str:
+    cols = blk["cols"]
+    head = "".join(f"<th>{_e(c)}</th>" for c in cols)
+    rows = []
+    for row in blk["rows"]:
+        cells = []
+        for j, cell in enumerate(row):
+            cls = cols[j].lower() if j < len(cols) else ""
+            if cls == "#":
+                cells.append(f'<td class="rk">{_e(cell)}</td>')
+            elif cls == "name":
+                cells.append(f'<td class="nm">{_e(cell)}</td>')
+            elif cls == "fit":
+                key = str(cell).lower().split()[0]
+                cells.append(f'<td><span class="fit {key}">{_e(cell)}</span></td>')
+            elif cls in ("priority", "audience", "rows"):
+                cells.append(f'<td class="num">{_e(cell)}</td>')
+            else:
+                cells.append(f"<td>{_e(cell)}</td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+
+
 def _person_html(p: dict) -> str:
-    color = BAND_COLOR.get(p["band"], "#6b7280")
-    scores = []
-    if p.get("priority") is not None:
-        scores.append(f"priority {int(p['priority'])}")
-    if p.get("fit_score") is not None:
-        scores.append(f"fit {int(p['fit_score'])}/100")
-    scores.append(p["id"])
-    fields = "".join(f"<dt>{_e(k)}</dt><dd>{_bold(str(v))}</dd>" for k, v in p["fields"])
+    band = p["band"]
+    role = next((v for k, v in p["fields"] if k == "Role"), "")
+    fields = "".join(f"<dt>{_e(k)}</dt><dd>{_bold(str(v))}</dd>"
+                     for k, v in p["fields"] if k != "Role")
     # Links and evidence are rows of the same definition list as everything
     # else, so their values line up with the fields above them.
     if p["links"]:
@@ -513,13 +613,18 @@ def _person_html(p: dict) -> str:
         fields += '<dt>Seen in</dt><dd class="links">' + "".join(
             (f'<a href="{_e(e["url"])}">{_e(e["title"][:70])}</a>' if e["url"]
              else _e(e["title"][:70])) for e in p["evidence"]) + "</dd>"
+
+    score = f'{int(p["fit_score"])}' if p.get("fit_score") is not None else "—"
+    pri = f' · priority {int(p["priority"])}' if p.get("priority") is not None else ""
     return (
-        f'<section class="person"><header><span class="rank">{p["rank"]}</span>'
-        f'<h4>{_e(p["name"])}</h4>'
-        f'<span class="badge" style="background:{color}">'
-        f'{_e(BAND_LABEL.get(p["band"], p["band"]))}</span></header>'
-        f'<div class="scores">{_e(" · ".join(scores))}</div>'
-        f'<dl class="f">{fields}</dl></section>'
+        f'<section class="person"><header>'
+        f'<span class="rank">{p["rank"]}</span>'
+        f'<div class="who"><h4>{_e(p["name"])}</h4>'
+        + (f'<div class="role">{_e(role)}</div>' if role else "")
+        + f'<div class="role" style="font-size:.74rem">{_e(p["id"])}{pri}</div></div>'
+        f'<div class="fitbox"><div class="score">{score}<span class="of">/100</span></div>'
+        f'<span class="badge {band}">{_e(BAND_LABEL.get(band, band))}</span></div>'
+        f'</header><dl class="f">{fields}</dl></section>'
     )
 
 
@@ -537,57 +642,108 @@ def _bold(text: str) -> str:
 # PDF
 # --------------------------------------------------------------------------
 
-INK = (0.08, 0.09, 0.11)
-MUTED = (0.42, 0.45, 0.50)
-LINE = (0.87, 0.88, 0.91)
+INK = (0.086, 0.075, 0.055)
+BODY = (0.24, 0.22, 0.18)
+MUTED = (0.54, 0.51, 0.45)
+FAINT = (0.70, 0.67, 0.60)
+LINE = (0.80, 0.77, 0.68)
+DARK = (0.078, 0.066, 0.043)
+DARK_INK = (0.937, 0.914, 0.859)
+DARK_MUT = (0.604, 0.569, 0.486)
+ACCENT = (0.11, 0.31, 0.84)
+
+
+def _hex(rgb: str) -> tuple:
+    rgb = rgb.lstrip("#")
+    return tuple(int(rgb[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+BAND_RGB = {k: _hex(v) for k, v in BAND_COLOR.items()}
 
 
 def to_pdf(blocks: list[dict]) -> bytes:
     c = pdf.Canvas()
+    section = 0
     for blk in blocks:
         t = blk["t"]
         if t == "cover":
-            c.space(28)
-            c.para(blk["title"], size=23, bold=True, rgb=INK, leading=1.2, gap=3)
-            c.para(blk["subtitle"], size=10.5, rgb=MUTED, gap=12)
-            for k, v in blk["meta"]:
-                c.label(k, str(v), key_w=104, size=9)
-            c.space(6)
-            c.rule()
+            _pdf_cover(c, blk)
         elif t == "h1":
-            c.need(56)
-            c.space(14)
-            c.para(blk["text"], size=15.5, bold=True, rgb=INK, gap=4)
-            c.rule(gap=3)
+            section += 1
+            c.need(64)
+            c.space(16)
+            # Section number as a small accent tab, then the title.
+            c.page.rect(c.margin, c.y - 3, 16, 13, ACCENT)
+            c.page.text(c.margin + 4.5, c.y, f"{section:02d}", 8, True, (1, 1, 1))
+            c.page.text(c.margin + 24, c.y, pdf.sanitize(blk["text"]), 15.5, True, INK)
+            c.y -= 12
+            c.rule(gap=4)
         elif t == "h2":
             c.need(40)
-            c.space(9)
-            c.para(blk["text"].upper(), size=8, bold=True, rgb=MUTED, gap=3)
+            c.space(10)
+            c.para(blk["text"].upper(), size=7.6, bold=True, rgb=MUTED, gap=3)
         elif t == "p":
-            c.para(_plain(blk["text"]), size=9.5, gap=5)
+            c.para(_plain(blk["text"]), size=9.5, rgb=BODY, gap=5)
         elif t == "bullet":
-            c.para("- " + _plain(blk["text"]), size=9.5, indent=6, gap=2)
+            c.para("- " + _plain(blk["text"]), size=9.5, rgb=BODY, indent=6, gap=2)
         elif t == "note":
             c.space(4)
-            c.para(_plain(blk["text"]), size=8.8, rgb=(0.36, 0.28, 0.03), indent=10, gap=6)
+            c.para(_plain(blk["text"]), size=8.8, rgb=(0.42, 0.33, 0.06), indent=10, gap=6)
         elif t == "mono":
-            c.para(blk["text"], size=8.2, rgb=(0.3, 0.32, 0.36), indent=10, gap=1)
+            c.para(blk["text"], size=8.2, rgb=(0.29, 0.27, 0.21), indent=10, gap=1)
         elif t == "kv":
             c.space(3)
             for k, v in blk["rows"]:
-                c.label(k, str(v), key_w=124, size=9)
+                c.label(k, str(v), key_w=124, size=9, val_rgb=BODY)
             c.space(5)
         elif t == "table":
             _pdf_table(c, blk["cols"], blk["rows"])
         elif t == "person":
             _pdf_person(c, blk)
         elif t == "footer":
-            c.space(10)
-            c.rule(gap=4)
-            c.para(blk["text"], size=8, rgb=MUTED)
+            c.space(12)
+            c.page.line(c.margin, c.y, c.w - c.margin, c.y, INK, 1.4)
+            c.y -= 12
+            c.page.text(c.margin, c.y, "WHO-FINDER", 7, True, INK)
+            w = pdf.text_width(pdf.sanitize(blk["text"]), 7.5)
+            c.page.text(c.w - c.margin - w, c.y, pdf.sanitize(blk["text"]), 7.5, False, MUTED)
         elif t == "pagebreak":
             c._new_page()
     return c.render()
+
+
+def _pdf_cover(c: pdf.Canvas, blk: dict) -> None:
+    """A dark masthead band with the title set in it, like the HTML cover."""
+    band_h = 150.0
+    top = c.h
+    c.page.rect(0, top - band_h, c.w, band_h, DARK)
+    # The tri-colour rule along the foot of the band.
+    thirds = [(ACCENT, 0.34), (BAND_RGB["strong"], 0.33), (BAND_RGB["possible"], 0.33)]
+    x = 0.0
+    for col, frac in thirds:
+        wseg = c.w * frac
+        c.page.rect(x, top - band_h - 3, wseg, 3, col)
+        x += wseg
+
+    tx = c.margin
+    ty = top - 40
+    c.page.text(tx, ty, "WHO-FINDER", 8, True, DARK_MUT)
+    w = pdf.text_width("RESEARCH DOSSIER", 8, True)
+    c.page.text(c.w - c.margin - w, ty, "RESEARCH DOSSIER", 8, True, DARK_MUT)
+    ty -= 30
+    for line in pdf.wrap(pdf.sanitize(blk["title"]), 22, c.col, True):
+        c.page.text(tx, ty, line, 22, True, DARK_INK)
+        ty -= 26
+    ty -= 4
+    for line in pdf.wrap(pdf.sanitize(blk["subtitle"]), 9.5, c.col):
+        c.page.text(tx, ty, line, 9.5, False, DARK_MUT)
+        ty -= 13
+
+    c.y = top - band_h - 3 - 22
+    for k, v in blk["meta"]:
+        c.label(k, str(v), key_w=104, size=9, val_rgb=BODY)
+    c.space(6)
+    c.rule()
 
 
 def _pdf_table(c: pdf.Canvas, cols: list[str], rows: list[list[str]]) -> None:
@@ -596,15 +752,16 @@ def _pdf_table(c: pdf.Canvas, cols: list[str], rows: list[list[str]]) -> None:
                for col in cols]
     total = sum(weights)
     widths = [c.col * w / total for w in weights]
+    fit_idx = next((i for i, col in enumerate(cols) if col.lower() == "fit"), None)
     c.space(6)
     c.need(30)
     x = c.margin
     c.y -= 11
     for col, w in zip(cols, widths):
-        c.page.text(x, c.y, pdf.sanitize(col.upper()), 7.2, True, MUTED)
+        c.page.text(x, c.y, pdf.sanitize(col.upper()), 7.0, True, MUTED)
         x += w
     c.y -= 4
-    c.page.line(c.margin, c.y, c.w - c.margin, c.y, LINE)
+    c.page.line(c.margin, c.y, c.w - c.margin, c.y, INK, 1.0)
     for row in rows:
         cells = [pdf.wrap(pdf.sanitize(str(v)), 8.6, w - 8) for v, w in zip(row, widths)]
         height = max(len(cl) for cl in cells) * 12.5 + 4
@@ -615,37 +772,77 @@ def _pdf_table(c: pdf.Canvas, cols: list[str], rows: list[list[str]]) -> None:
             yy = top
             for line in cl:
                 yy -= 12.5
-                c.page.text(x, yy, line, 8.6, j == 1, INK if j == 1 else (0.25, 0.27, 0.3))
+                if j == fit_idx:
+                    _pdf_chip(c, x, yy, line)
+                else:
+                    c.page.text(x, yy, line, 8.6, j == 1, INK if j == 1 else BODY)
         c.y = top - height
-        c.page.line(c.margin, c.y + 2, c.w - c.margin, c.y + 2, (0.94, 0.95, 0.96))
+        c.page.line(c.margin, c.y + 2, c.w - c.margin, c.y + 2, (0.90, 0.88, 0.82))
     c.space(8)
 
 
+def _pdf_chip(c: pdf.Canvas, x: float, y: float, label: str) -> None:
+    """A small filled lozenge for a fit band inside the ranking table."""
+    key = label.lower().split()[0] if label else "unknown"
+    col = BAND_RGB.get(key, BAND_RGB["unknown"])
+    w = pdf.text_width(label, 6.8, True) + 9
+    c.page.rect(x, y - 2.2, w, 11, col)
+    c.page.text(x + 4.5, y, pdf.sanitize(label), 6.8, True, (1, 1, 1))
+
+
 def _pdf_person(c: pdf.Canvas, p: dict) -> None:
-    c.need(96)
-    c.space(11)
-    band = BAND_LABEL.get(p["band"], p["band"])
-    title = f"{p['rank']}. {p['name']}"
-    c.para(title, size=12.5, bold=True, rgb=INK, gap=1)
-    scores = [band]
-    if p.get("priority") is not None:
-        scores.append(f"priority {int(p['priority'])}")
+    c.need(108)
+    c.space(12)
+    band = p["band"]
+    accent = BAND_RGB.get(band, BAND_RGB["unknown"])
+
+    # A coloured bar on the left edge carries the fit at a glance.
+    bar_x = c.margin
+    body_x = c.margin + 12
+    top = c.y
+
+    # Header: rank, name, and a fit score block on the right.
+    c.page.text(body_x, top - 14, str(p["rank"]), 20, True, FAINT)
+    name_x = body_x + 30
+    c.page.text(name_x, top - 14, pdf.sanitize(p["name"]), 13.5, True, INK)
     if p.get("fit_score") is not None:
-        scores.append(f"fit {int(p['fit_score'])}/100")
-    scores.append(p["id"])
-    c.para("  ·  ".join(scores), size=8, rgb=_band_rgb(p["band"]), gap=4)
+        sc = str(int(p["fit_score"]))
+        c.page.text(c.w - c.margin - pdf.text_width(sc, 16, True) - 30, top - 16,
+                    sc, 16, True, INK)
+        c.page.text(c.w - c.margin - 26, top - 13, "/100", 7, False, MUTED)
+    # Fit chip under the score.
+    label = BAND_LABEL.get(band, band)
+    chip_w = pdf.text_width(label, 6.6, True) + 9
+    c.page.rect(c.w - c.margin - chip_w, top - 32, chip_w, 11, accent)
+    c.page.text(c.w - c.margin - chip_w + 4.5, top - 29, pdf.sanitize(label), 6.6, True, (1, 1, 1))
+
+    role = next((v for k, v in p["fields"] if k == "Role"), "")
+    c.y = top - 32
+    if role:
+        c.page.text(name_x, c.y, pdf.sanitize(_plain(str(role)))[:90], 8.6, False, MUTED)
+    sub = p["id"] + (f"  ·  priority {int(p['priority'])}" if p.get("priority") is not None else "")
+    c.y -= 12
+    c.page.text(name_x, c.y, pdf.sanitize(sub), 7.4, False, FAINT)
+    c.y -= 6
+    c.page.line(body_x, c.y, c.w - c.margin, c.y, LINE)
+    c.y -= 4
+
     for k, v in p["fields"]:
-        c.label(k, _plain(str(v)), key_w=92, size=8.8)
+        if k == "Role":
+            continue
+        c.label(k, _plain(str(v)), key_w=92, size=8.8, val_rgb=BODY, x=body_x)
     for l in p["links"][:3]:
-        c.label("Link", str(l), key_w=92, size=8.2)
+        c.label("Link", str(l), key_w=92, size=8.2, val_rgb=BODY, x=body_x)
     if p.get("found_by"):
         c.label("Found by", "  |  ".join(_short_query(q) for q in p["found_by"]),
-                key_w=92, size=8.2)
+                key_w=92, size=8.2, val_rgb=BODY, x=body_x)
     for e in p["evidence"][:3]:
         c.label("Seen in", f"{e['title'][:80]}" + (f"  {e['url']}" if e["url"] else ""),
-                key_w=92, size=8.2)
-    c.space(5)
-    c.page.line(c.margin, c.y, c.w - c.margin, c.y, (0.93, 0.94, 0.96))
+                key_w=92, size=8.2, val_rgb=BODY, x=body_x)
+
+    # The accent bar runs the full height of the card.
+    c.page.rect(bar_x, c.y + 2, 3, top - c.y - 2, accent)
+    c.space(6)
 
 
 def _band_rgb(band: str) -> tuple:
