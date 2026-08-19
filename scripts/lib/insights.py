@@ -26,6 +26,8 @@ def coverage(source_status: list[dict]) -> list[str]:
             out.append(f"{label} ok({s.get('n', 0)})")
         elif state == "no-results":
             out.append(f"{label} no-results")
+        elif state == "unparsed":
+            out.append(f"{label} UNPARSED({s.get('raw_n', 0)} raw)")
         else:
             out.append(f"{label} ERROR")
     return out
@@ -74,9 +76,24 @@ def findings(
     topic: str,
     n_new: int,
     n_known: int,
+    source_status: list[dict] | None = None,
 ) -> list[str]:
     out: list[str] = []
     if not rows:
+        steps = source_status or []
+        drifted = [s for s in steps if s.get("state") == "unparsed"]
+        if drifted and len(drifted) == len(steps):
+            return [
+                "Nothing was read. Every source answered, but in a shape this build "
+                "could not parse (see GAPS) — that is a parser failure, not evidence "
+                "that nobody matches. Do not report this as an empty market."
+            ]
+        if drifted:
+            n = len(drifted)
+            return [
+                f"No entities matched among the sources that parsed, but {n} "
+                f"{plural(n, 'source')} drifted (see GAPS). Treat this as partial."
+            ]
         return ["No entities matched. Widen freshness or drop a source filter."]
 
     plats = Counter(r.get("platform") for r in rows)
@@ -145,6 +162,22 @@ def gaps(dossiers: list[dict], source_status: list[dict], errors: list[str]) -> 
             "Sources that errored (absence here is not evidence): "
             + ", ".join(f"{s.get('source')}:{s.get('label')}" for s in dead)
         )
+    drifted = [s for s in (source_status or []) if s.get("state") == "unparsed"]
+    if drifted:
+        parts = []
+        for s in drifted:
+            where = s.get("stray_at")
+            if s.get("raw_n"):
+                why = f"{s['raw_n']} records we could not read"
+            elif where:
+                why = f"records moved to '{where}' ({s.get('stray_n', 0)})"
+            else:
+                why = f"expected container missing (keys: {'/'.join(s.get('response_keys') or []) or 'none'})"
+            parts.append(f"{s.get('source')}:{s.get('label')} — {why}")
+        out.append(
+            "SCHEMA DRIFT — these sources answered but this build could not read them, "
+            "so their silence is a parser bug, not an absence: " + "; ".join(parts)
+        )
     empty = [s for s in (source_status or []) if s.get("state") == "no-results"]
     if empty:
         out.append(
@@ -174,7 +207,13 @@ def build(
     return {
         "coverage": coverage(source_status),
         "findings": findings(
-            rows, dossiers, scenario=scenario, topic=topic, n_new=n_new, n_known=n_known
+            rows,
+            dossiers,
+            scenario=scenario,
+            topic=topic,
+            n_new=n_new,
+            n_known=n_known,
+            source_status=source_status,
         ),
         "clusters": clusters(dossiers),
         "gaps": gaps(dossiers, source_status, errors),

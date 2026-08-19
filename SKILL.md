@@ -3,7 +3,7 @@ name: who-finder
 description: Deep public research on people or companies by scenario (operators, firms, creators, hiring, press, A vs B). Plans the queries, fetches profiles, scores ICP fit with reasons, ranks by priority, and keeps a seen-list so outreach only gets new names. Use when asked to find people, find companies, find creators, research a market, who is hiring, journalists covering a topic, compare two scenes, LinkedIn public profiles, YouTube talent, build a shortlist, qualify leads, or export a handoff CSV. Not for sending messages, not for logged-in LinkedIn scraping, not for CRM.
 license: Apache-2.0
 metadata:
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # who-finder
@@ -78,7 +78,8 @@ Do not mix YouTube engagement scores with LinkedIn presence scores. Do not add I
 - `WHAT I FOUND` — engine-written, count-backed. Do not embellish it.
 - `WHO TO CONTACT` — ranked cards. `does` is their role, `why` is the fit arithmetic, `now` is a real recent post, `tags` are signals.
 - Bands: `STRONG` (verified profile + topic + title/audience match), `MAYBE`, `weak`, `off`, `?` (unknown — we could not fetch the profile).
-- `GAPS` — sources that errored versus sources that ran and returned nothing. **These are different claims.** Never report a source that errored as "nothing out there".
+- `GAPS` — sources that errored, sources that drifted, and sources that ran and returned nothing. **These are three different claims.** Never report the first two as "nothing out there".
+- `SCHEMA DRIFT` in `GAPS` means the source answered but this build could not read the response. Zero rows there is a parser bug, not an absence — say so, and do not summarise the run as an empty market. The line names the source and, when the records merely moved, the new key path.
 - A row we could not enrich is capped at `MAYBE`, never `STRONG`. If they push for a verdict on one, run `enrich <id>` rather than upgrading it yourself.
 
 ## ICP fit
@@ -114,6 +115,7 @@ With no file, the engine derives a topic gate from the brief and uses generic se
 - **mask leak** — printed `*******` from a masked LinkedIn experience block.
 - **confident unknown** — presented an unenriched row as a qualified lead.
 - **silent error** — reported a failed source as an empty result.
+- **phantom absence** — read `UNPARSED` / `SCHEMA DRIFT` as "the market is empty" instead of "our parser broke".
 
 ## Load when the engine is not enough
 

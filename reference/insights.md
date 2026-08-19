@@ -6,15 +6,33 @@ The agent pastes these lines. It does not rewrite them, and it does not add find
 
 ## Coverage — the distinction that matters most
 
-Each planned query ends in one of three states:
+Each planned query ends in one of four states:
 
 | state | rendered | means |
 |---|---|---|
 | `ok` | `youtube:yt ok(12)` | ran, returned rows |
-| `no-results` | `x:x no-results` | ran fine, genuinely empty |
+| `no-results` | `x:x no-results` | ran fine, container present and empty — a real absence |
+| `unparsed` | `x:x UNPARSED(7 raw)` | answered, but we could not read it — a parser bug |
 | `error` | `web:w ERROR` | never completed |
 
 **"We found no X" and "we did not successfully look for X" are different claims.** A source that errored appears in `GAPS` under *sources that errored (absence here is not evidence)*. Reporting that as "nothing out there" is the single most damaging thing this tool could do, because the user acts on absence.
+
+## Why `unparsed` exists
+
+Every parser in this build was written against ScrapeCreators' *documented* response shapes. If upstream renames a field or moves a container, each parser quietly yields zero rows — and a zero that gets labelled `no-results` becomes a confident claim that the market is empty.
+
+`sources.probe` separates the two by asking what the response actually contained:
+
+| container | records | state |
+|---|---|---|
+| present, non-empty | unreadable | `unparsed` — parse failure |
+| present, empty | none | `no-results` — trustworthy absence |
+| absent | found elsewhere | `unparsed`, with the new path (`data.organic`) |
+| absent | none found | `unparsed` — envelope unrecognised |
+
+Only *container present and empty* licenses the sentence "we found nothing."
+
+When every step drifts, `WHAT I FOUND` refuses to summarise it as an empty market and says so outright. The `GAPS` line names the source and, when the records simply moved, the exact new key path — so the fix is a one-line change rather than an investigation.
 
 ## Findings
 

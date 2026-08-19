@@ -9,7 +9,7 @@ Python 3.11+. No pip, no build step. One dependency: a [ScrapeCreators](https://
 ## What you get
 
 ```
-who-finder v3.0.0  scenario=people  topic=making ai video ads  new=3 known=0
+who-finder v3.1.0  scenario=people  topic=making ai video ads  new=3 known=0
 plan:     linkedin_people:li-in | linkedin_people:li-titles | youtube:yt | x:x
 coverage: linkedin_people:li-in ok(2) | youtube:yt ok(1) | x:x no-results
 depth:    enriched 3/3  icp=higgsfield  credits~8
@@ -51,7 +51,13 @@ python3 ~/.cursor/skills/who-finder/scripts/who_finder.py doctor --agent
 
 Use `~/.claude/skills/who-finder` for Claude, or `.claude/skills/who-finder` inside a project to scope it to one repo. Any folder your agent loads skills from works — the skill resolves its own path.
 
-`doctor` tells you exactly which of the four states you are in: `ready`, `skipped-unconfigured`, `auth-failed`, `error`.
+`doctor` tells you exactly which of the four states you are in: `ready`, `skipped-unconfigured`, `auth-failed`, `error`. Add `--probe` to spend one credit on a real search and confirm the whole path works end to end.
+
+### Verification status — read this once
+
+The parsers here were written against ScrapeCreators' **documented** response shapes and are covered by 87 offline tests. They have **not** been exercised against a live API key. Run `doctor --probe` as your first command.
+
+If upstream has moved a field since, you will not get a silent empty result: any source that answers in a shape the parsers cannot read is reported as `UNPARSED` with a `SCHEMA DRIFT` line naming the source and the new key path. Zero rows under that banner is a parser bug, not an empty market. Send that line along in a bug report and the fix is usually one key.
 
 ## Ask your agent
 

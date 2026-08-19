@@ -46,6 +46,69 @@ GOOGLE_SOURCES = frozenset({
     "reddit",
 })
 
+# The response containers each parser reads, per source family. Counting them
+# is what separates "the API returned nothing" from "the API returned records
+# we failed to read" — both otherwise arrive as zero hits, and reporting the
+# second as an empty result would state an absence we never established.
+RECORD_KEYS = {
+    "youtube": ("videos", "shorts", "items", "data"),
+    "tiktok": ("search_item_list", "data"),
+    "instagram": ("items", "data", "reels"),
+    "google": ("results", "items", "data"),
+}
+
+
+def _stray_records(node: Any, path: str = "", depth: int = 0) -> tuple[int, str]:
+    """Largest list-of-objects anywhere shallow in the envelope, and its path.
+
+    Consulted only when none of a parser's own containers are present, which is
+    what an upstream rename looks like from here. Returning the path means the
+    fix is a one-line key change rather than an investigation.
+    """
+    if depth > 3 or not isinstance(node, dict):
+        return 0, ""
+    best, where = 0, ""
+    for key, val in node.items():
+        if key.startswith("_"):
+            continue
+        here = f"{path}.{key}" if path else key
+        if isinstance(val, list) and val and isinstance(val[0], dict):
+            if len(val) > best:
+                best, where = len(val), here
+        elif isinstance(val, dict):
+            n, sub = _stray_records(val, here, depth + 1)
+            if n > best:
+                best, where = n, sub
+    return best, where
+
+
+def probe(data: Any, source: str) -> dict:
+    """What the response actually contained, for honest zero-hit reporting.
+
+    Three outcomes matter and they are not interchangeable: the parser's
+    container was present and empty (a real absence), present with records (a
+    parse failure), or missing entirely (upstream moved it). Only the first
+    licenses the sentence "we found nothing".
+    """
+    family = "google" if source in GOOGLE_SOURCES else source
+    keys = RECORD_KEYS.get(family, ("data",))
+    if not isinstance(data, dict):
+        return {"raw_n": 0, "keys": [], "container": "absent", "stray_n": 0, "stray_at": ""}
+
+    containers = [k for k in keys if isinstance(data.get(k), list)]
+    raw_n = sum(len(data[k]) for k in containers)
+    top = sorted(k for k in data if not k.startswith("_"))
+    out = {
+        "raw_n": raw_n,
+        "keys": top[:12],
+        "container": "present" if containers else "absent",
+        "stray_n": 0,
+        "stray_at": "",
+    }
+    if not containers:
+        out["stray_n"], out["stray_at"] = _stray_records(data)
+    return out
+
 
 def _n(v: Any) -> int:
     if isinstance(v, bool):
@@ -101,13 +164,16 @@ def _handle(raw: str) -> str:
     return h.strip() or raw.strip()
 
 
-def youtube(token: str, query: str, limit: int, freshness: str = "month") -> list[dict]:
+def fetch_youtube(token: str, query: str, freshness: str = "month") -> dict:
     params: dict[str, Any] = {"query": query, "includeExtras": "true"}
     upload = FRESHNESS.get(freshness, FRESHNESS["month"]).get("youtube")
     if upload:
         params["uploadDate"] = upload
-    data = http.get(f"{SC}/v1/youtube/search", params=params, headers=http.sc_headers(token))
-    return parse_youtube(data, limit)
+    return http.get(f"{SC}/v1/youtube/search", params=params, headers=http.sc_headers(token))
+
+
+def youtube(token: str, query: str, limit: int, freshness: str = "month") -> list[dict]:
+    return parse_youtube(fetch_youtube(token, query, freshness), limit)
 
 
 def parse_youtube(data: dict, limit: int, scenario_kind: str = "person") -> list[dict]:
@@ -189,17 +255,20 @@ def parse_youtube(data: dict, limit: int, scenario_kind: str = "person") -> list
     return hits
 
 
-def tiktok(token: str, query: str, limit: int, freshness: str = "month") -> list[dict]:
+def fetch_tiktok(token: str, query: str, freshness: str = "month") -> dict:
     params: dict[str, Any] = {"query": query, "sort_by": "relevance"}
     posted = FRESHNESS.get(freshness, FRESHNESS["month"]).get("tiktok")
     if posted:
         params["date_posted"] = posted
-    data = http.get(
+    return http.get(
         f"{SC}/v1/tiktok/search/keyword",
         params=params,
         headers=http.sc_headers(token),
     )
-    return parse_tiktok(data, limit)
+
+
+def tiktok(token: str, query: str, limit: int, freshness: str = "month") -> list[dict]:
+    return parse_tiktok(fetch_tiktok(token, query, freshness), limit)
 
 
 def parse_tiktok(data: dict, limit: int) -> list[dict]:
@@ -248,24 +317,26 @@ def parse_tiktok(data: dict, limit: int) -> list[dict]:
     return hits
 
 
-def instagram(token: str, query: str, limit: int, freshness: str = "month") -> list[dict]:
+def fetch_instagram(token: str, query: str, freshness: str = "month") -> dict:
     posted = FRESHNESS.get(freshness, FRESHNESS["month"]).get("instagram")
     try:
-        data = http.get(
+        return http.get(
             f"{SC}/v2/instagram/reels/search",
             params={"query": query, "date_posted": posted},
             headers=http.sc_headers(token),
         )
     except http.HTTPError as exc:
         if exc.status == 500 and " " in query:
-            data = http.get(
+            return http.get(
                 f"{SC}/v2/instagram/reels/search",
                 params={"query": re.sub(r"\s+", "", query).lower(), "date_posted": posted},
                 headers=http.sc_headers(token),
             )
-        else:
-            raise
-    return parse_instagram(data, limit)
+        raise
+
+
+def instagram(token: str, query: str, limit: int, freshness: str = "month") -> list[dict]:
+    return parse_instagram(fetch_instagram(token, query, freshness), limit)
 
 
 def parse_instagram(data: dict, limit: int) -> list[dict]:
@@ -383,20 +454,24 @@ def _run_one(
     limit: int,
     freshness: str,
     scenario_kind: str,
-) -> list[dict]:
+) -> tuple[list[dict], dict]:
     if source == "youtube":
-        hits = youtube(token, query, limit, freshness)
+        data = fetch_youtube(token, query, freshness)
+        hits = parse_youtube(data, limit)
         for h in hits:
             h["kind"] = scenario_kind
-        return hits
-    if source == "tiktok":
-        return tiktok(token, query, limit, freshness)
-    if source == "instagram":
-        return instagram(token, query, limit, freshness)
-    if source in GOOGLE_SOURCES:
+    elif source == "tiktok":
+        data = fetch_tiktok(token, query, freshness)
+        hits = parse_tiktok(data, limit)
+    elif source == "instagram":
+        data = fetch_instagram(token, query, freshness)
+        hits = parse_instagram(data, limit)
+    elif source in GOOGLE_SOURCES:
         data = google_search(token, query, freshness)
-        return parse_google(data, limit, source=source, scenario_kind=scenario_kind)
-    raise ValueError(f"unknown source {source}")
+        hits = parse_google(data, limit, source=source, scenario_kind=scenario_kind)
+    else:
+        raise ValueError(f"unknown source {source}")
+    return hits, probe(data, source)
 
 
 def search_step(
@@ -409,12 +484,12 @@ def search_step(
     side: str = "",
     label: str = "",
     weight: float = 1.0,
-) -> tuple[list[dict], str | None]:
+) -> tuple[list[dict], str | None, dict]:
     kind = _kind_for(scenario, source)
     try:
-        hits = _run_one(token, source, query, limit, freshness, kind)
+        hits, pr = _run_one(token, source, query, limit, freshness, kind)
     except Exception as exc:
-        return [], f"{source}/{label or query}: {exc}"
+        return [], f"{source}/{label or query}: {exc}", {"raw_n": 0, "keys": []}
     out = []
     for h in hits:
         h = apply_flags(h)
@@ -423,7 +498,7 @@ def search_step(
         h["weight"] = weight
         h["query"] = query
         out.append(h)
-    return out, None
+    return out, None, pr
 
 
 def run_plan(
@@ -438,7 +513,7 @@ def run_plan(
     status: list[dict] = []
     per = max(8, limit)
     for step in plan.steps:
-        hits, err = search_step(
+        hits, err, pr = search_step(
             token,
             step.source,
             step.query,
@@ -459,21 +534,38 @@ def run_plan(
                     "ok": False,
                     "error": err,
                     "n": 0,
+                    "raw_n": 0,
                     "state": "error",
                 }
             )
             continue
         all_hits.extend(hits)
-        status.append(
-            {
-                "source": step.source,
-                "label": step.label,
-                "query": step.query,
-                "ok": True,
-                "n": len(hits),
-                "state": "ok" if hits else "no-results",
-            }
-        )
+        raw_n = pr.get("raw_n", 0)
+        # A zero-hit step is only a real absence when our own container was
+        # there and empty. Records we could not read, or a container that has
+        # gone missing, are both parser failures wearing the same zero.
+        if hits:
+            state = "ok"
+        elif raw_n or pr.get("stray_n"):
+            state = "unparsed"
+        elif pr.get("container") == "absent":
+            state = "unparsed"
+        else:
+            state = "no-results"
+        entry = {
+            "source": step.source,
+            "label": step.label,
+            "query": step.query,
+            "ok": True,
+            "n": len(hits),
+            "raw_n": raw_n,
+            "state": state,
+        }
+        if state == "unparsed":
+            entry["response_keys"] = pr.get("keys") or []
+            entry["stray_n"] = pr.get("stray_n", 0)
+            entry["stray_at"] = pr.get("stray_at", "")
+        status.append(entry)
     entities = rollup_entities(all_hits, plan.scenario)[:limit]
     return entities, all_hits, errors, status
 

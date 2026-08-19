@@ -582,7 +582,7 @@ def cmd_search(args: argparse.Namespace) -> int:
         return 4
     srcs = _parse_sources(args.sources) or ["youtube"]
     scenario = detect_scenario(args.query, None)
-    hits, err = sources.search_step(
+    hits, err, _ = sources.search_step(
         token, srcs[0], args.query, args.limit, args.freshness, scenario
     )
     errors = [err] if err else []
