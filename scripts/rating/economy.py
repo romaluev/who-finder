@@ -9,7 +9,7 @@ when a cheaper source already did their job.
 from __future__ import annotations
 
 from . import auth
-from .collectors.public import PublicCollector, is_blocked, is_video
+from .collectors.public import is_blocked, is_video
 from .util import platform_of
 
 # New invoice. Clay is already on the company card.
@@ -56,13 +56,11 @@ def lite_plan(
     platform = platform_of(url)
     steps = []
 
-    pub = PublicCollector()
-    if pub.can_touch(url) or is_video(url):
-        steps.append({
-            "backend": "public",
-            "cost": 0,
-            "why": "yt-dlp / RSS / public HTML — no key",
-        })
+    steps.append({
+        "backend": "public",
+        "cost": 0,
+        "why": "public search / yt-dlp / RSS — LinkedIn itself is never fetched",
+    })
 
     if (caps.get("clay") or {}).get("available"):
         steps.append({

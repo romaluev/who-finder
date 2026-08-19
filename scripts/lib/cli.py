@@ -491,6 +491,12 @@ def cmd_rate(args: argparse.Namespace) -> int:
         argv.append("--agent")
     if getattr(args, "preset", None):
         argv += ["--preset", args.preset]
+    if getattr(args, "brief", None):
+        argv += ["--brief", args.brief]
+    if getattr(args, "no_collect", False):
+        argv.append("--no-collect")
+    if getattr(args, "cheap", False):
+        argv.append("--cheap")
     if path.suffix.lower() == ".json":
         argv += ["--who-finder", str(path)]
     else:
@@ -1678,6 +1684,9 @@ def main(argv: list[str] | None = None) -> int:
     rt.add_argument("--format", default="md,html,pdf")
     rt.add_argument("--out", default="rating")
     rt.add_argument("--preset", default="awareness+leads")
+    rt.add_argument("--brief", default=None)
+    rt.add_argument("--no-collect", action="store_true")
+    rt.add_argument("--cheap", action="store_true")
     rt.set_defaults(fn=cmd_rate)
 
     rn = sub.add_parser("run", parents=[shared], help="find, then rate — one report")

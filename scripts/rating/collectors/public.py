@@ -12,11 +12,12 @@ import json
 import re
 import shutil
 import subprocess
+import time
 import xml.etree.ElementTree as ET
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from .. import auth, http
-from ..util import clean, handle_from, norm_url, platform_of, to_int
+from ..util import clean, handle_from, linkedin_handle, norm_url, platform_of, to_int
 from .base import Collector, Post, Profile
 
 DDG_HTML = "https://html.duckduckgo.com/html/"
@@ -131,7 +132,8 @@ def search_ddg(query: str, limit: int) -> tuple[list[dict], str | None]:
             DDG_HTML,
             params={"q": query, "kl": "us-en"},
             headers={"Accept": "text/html"},
-            timeout=25,
+            timeout=8,
+            retries=0,
         )
     except Exception as exc:
         return [], str(exc)
@@ -200,18 +202,25 @@ def search_hn(query: str, limit: int) -> tuple[list[dict], str | None]:
     return items, None
 
 
+_WEB_SEARCH_DEAD = False
+
+
 def search_web(query: str, limit: int = 15) -> tuple[list[dict], str]:
     """Brave if a key is set, otherwise DuckDuckGo. Always returns a backend name."""
+    global _WEB_SEARCH_DEAD
+    if _WEB_SEARCH_DEAD:
+        return [], "skipped: public web search timed out earlier this run"
     brave = auth.token("brave")
     if brave:
         hits, err = search_brave(brave, query, limit)
         if hits:
             return hits, "brave"
-        # fall through on empty or error
         _ = err
     hits, err = search_ddg(query, limit)
     if hits:
         return hits, "ddg"
+    if err and "timed out" in str(err):
+        _WEB_SEARCH_DEAD = True
     return [], err or "no public search hits"
 
 
@@ -320,6 +329,27 @@ def ytdlp_channel(url: str, n: int = 20) -> tuple[Profile | None, list[Post]]:
         if prof:
             break
     return prof, posts
+
+
+def ytdlp_search(query: str, n: int = 8) -> tuple[Profile | None, list[Post]]:
+    """YouTube search. Public, no key. Empty query is a no-op."""
+    q = clean(query)
+    if not q or not ytdlp_bin():
+        return None, []
+    n = min(max(int(n), 1), 12)
+    return ytdlp_channel(f"ytsearch{n}:{q}", n=n)
+
+
+def channel_fits_handle(handle: str, channel: str) -> bool:
+    """True when a YouTube channel name is this LinkedIn handle, not a namesake."""
+    if "@" in (channel or ""):
+        return False
+    h = re.sub(r"[^a-z0-9]", "", (handle or "").lower())
+    blob = re.sub(r"[^a-z0-9]", "", (channel or "").lower())
+    if len(h) >= 6 and h in blob:
+        return True
+    parts = [p for p in (handle or "").lower().split("-") if len(p) > 2 and not p.isdigit()]
+    return len(parts) >= 2 and all(p in blob for p in parts)
 
 
 def parse_feed(xml: str, limit: int = 20) -> list[Post]:
@@ -486,6 +516,93 @@ def hits_to_profiles(hits: list[dict], source: str = "public") -> list[Profile]:
     return out
 
 
+_LI_TITLE_TAIL = re.compile(r"\s*[|\-–—]\s*LinkedIn\s*$", re.I)
+
+
+def parse_linkedin_search_hit(title: str, snippet: str) -> tuple[str, str, int, int]:
+    """Read a name and headline from an indexed search hit. Empty if unread."""
+    t = _LI_TITLE_TAIL.sub("", clean(title)).strip()
+    t = re.sub(r"\s*\(\d+\)\s*$", "", t)
+    headline = clean(snippet, 180)
+    name = ""
+    for sep in (" - ", " – ", " — ", " | "):
+        if sep in t:
+            left, right = t.split(sep, 1)
+            name = clean(left)
+            rest = clean(right, 180)
+            if rest and rest.lower() != "linkedin":
+                headline = rest or headline
+            break
+    else:
+        name = clean(t)
+    if name.lower() in {"", "linkedin", "linkedin login", "sign in"}:
+        name = ""
+    followers = connections = 0
+    fm = re.search(r"([\d,.]+(?:\.\d+)?\s*[kmbKMB]?)\s*\+?\s*followers", snippet or "", re.I)
+    if fm:
+        followers = to_int(fm.group(1))
+    cm = re.search(r"([\d,.]+(?:\.\d+)?\s*[kmbKMB]?)\s*\+?\s*connections", snippet or "", re.I)
+    if cm:
+        connections = to_int(cm.group(1))
+    return name, headline, followers, connections
+
+
+def _tokens_match(person: str, text: str) -> bool:
+    tokens = [t for t in re.split(r"[^a-z0-9]+", (person or "").lower()) if len(t) > 2]
+    if not tokens:
+        return False
+    blob = (text or "").lower()
+    return any(tok in blob for tok in tokens)
+
+
+def _identity_from_hits(hits: list[dict], handle: str) -> tuple[str, str, str, int, int, list[Post]]:
+    name = headline = ""
+    followers = connections = 0
+    about_bits: list[str] = []
+    posts: list[Post] = []
+    for h in hits or []:
+        url = (h.get("url") or "")
+        if handle and handle not in url.lower() and "linkedin.com" in url.lower():
+            continue
+        n, hl, fo, co = parse_linkedin_search_hit(h.get("title") or "", h.get("snippet") or "")
+        if n and not name:
+            name = n
+        if hl and not headline:
+            headline = hl
+        followers = max(followers, fo)
+        connections = max(connections, co)
+        snip = clean(h.get("snippet") or "", 240)
+        if snip and snip not in about_bits:
+            about_bits.append(snip)
+        if re.search(r"linkedin\.com/(posts|pulse)/", url, re.I):
+            text = clean(h.get("title") or h.get("snippet") or "", 280)
+            if text:
+                posts.append(Post(
+                    id=url, url=url, text=text, posted_at="",
+                    reactions=0, comments=0, reposts=0, impressions=None,
+                    format="post", source="public",
+                ))
+    return name, headline, " ".join(about_bits)[:800], followers, connections, posts
+
+
+def _video_posts_from_hits(hits: list[dict], seed: str, n: int = 8) -> list[Post]:
+    posts: list[Post] = []
+    for h in hits or []:
+        if len(posts) >= n:
+            break
+        url = h.get("url") or ""
+        title = h.get("title") or ""
+        if not _tokens_match(seed, f"{title} {url}"):
+            continue
+        if not is_video(url) or not ytdlp_bin():
+            continue
+        _, found = ytdlp_channel(url, n=n)
+        posts.extend(found)
+        if found:
+            break
+    return posts[:n]
+
+
 class PublicCollector(Collector):
     """yt-dlp, RSS, public HTML, and web search. Always available."""
 
@@ -516,6 +633,68 @@ class PublicCollector(Collector):
         except Exception:
             return None
         return parse_public_html(html, url)
+
+    def discover_linkedin(self, url: str) -> tuple[Profile | None, list[Post]]:
+        """Name, headline, and public posts for a LinkedIn URL — without fetching it.
+
+        DuckDuckGo (or Brave) already indexed the profile. YouTube/TikTok
+        posts are pulled with yt-dlp when a matching channel is in the
+        results. linkedin.com itself is never requested.
+        """
+        url = norm_url(url)
+        handle = linkedin_handle(url)
+        if not handle:
+            return None, []
+        hits, backend = search_web(f"linkedin.com/in/{handle}", limit=8)
+        timed_out = "timed out" in str(backend or "")
+        if not hits and not timed_out:
+            hits, backend = search_web(f"{handle} LinkedIn", limit=8)
+        name, headline, about, followers, connections, posts = _identity_from_hits(
+            hits, handle
+        )
+        seed = name or handle.replace("-", " ")
+        yt_queries = []
+        if name:
+            yt_queries.append(name)
+        yt_queries.append(seed)
+        if handle not in yt_queries:
+            yt_queries.append(handle)
+        for q in yt_queries:
+            yt_prof, yt_posts = ytdlp_search(q, n=8)
+            channel = (yt_prof or {}).get("name") or ""
+            if not yt_posts or not channel_fits_handle(handle, channel):
+                continue
+            if not name and channel:
+                name = channel.split("|")[0].split(" - ")[0].strip()
+            if not headline and (yt_prof or {}).get("headline"):
+                headline = clean(yt_prof.get("headline") or "", 180)
+            followers = max(followers, int((yt_prof or {}).get("followers") or 0))
+            posts.extend(yt_posts)
+            about = about or clean((yt_prof or {}).get("about") or "", 800)
+            break
+        seen: set[str] = set()
+        uniq: list[Post] = []
+        for p in posts:
+            pid = p.get("id") or p.get("url") or ""
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            uniq.append(p)
+        payload = {
+            "url": url,
+            "handle": handle,
+            "platform": "linkedin",
+            "source": "public",
+            "followers": followers,
+            "connections": connections,
+        }
+        if name:
+            payload["name"] = name
+        if headline:
+            payload["headline"] = headline
+        if about:
+            payload["about"] = about
+        return Profile(payload), uniq
 
     def posts(self, url: str, n: int = 20) -> list[Post]:
         url = norm_url(url)

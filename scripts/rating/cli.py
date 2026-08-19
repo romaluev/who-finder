@@ -286,13 +286,24 @@ def _rate_rows(conn, args) -> list[dict]:
 
 def cmd_rate(args: argparse.Namespace) -> int:
     conn = _db(args)
+    ts = db.now()
+    ids: list[str] = []
     if getattr(args, "csv", None):
-        longlist.from_csv(conn, args.csv, db.now())
+        ids = longlist.from_csv(conn, args.csv, ts).get("ids") or []
         conn.commit()
     if getattr(args, "who_finder", None):
         text = Path(args.who_finder).expanduser().read_text(encoding="utf-8")
-        longlist.from_who_finder(conn, text, db.now())
+        ids = longlist.from_who_finder(conn, text, ts).get("ids") or []
         conn.commit()
+    if not getattr(args, "no_collect", False):
+        if not ids:
+            ids = [c["id"] for c in db.list_creators(conn, limit=args.limit)]
+        for cid in ids:
+            pipeline.collect_lite(
+                conn, cid, ts, cheap=bool(getattr(args, "cheap", False)),
+            )
+            pipeline.classify_creator(conn, cid, ts)
+            conn.commit()
     rows = _rate_rows(conn, args)
     rung, label, _ = _rung_state(conn)
     table = emit.table(rows, preset=args.preset, rung_label=label, n=len(rows))
@@ -688,6 +699,9 @@ def main(argv: list[str] | None = None) -> int:
     rt.add_argument("--out", default=None)
     rt.add_argument("--brief", default=None)
     rt.add_argument("--budget", type=float, default=None)
+    rt.add_argument("--no-collect", action="store_true",
+                    help="score what is already stored; do not search")
+    rt.add_argument("--cheap", action="store_true")
     rt.set_defaults(fn=cmd_rate)
 
     rp = sub.add_parser("report", parents=[shared])

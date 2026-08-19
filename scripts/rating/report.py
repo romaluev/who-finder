@@ -257,13 +257,15 @@ def _person(i: int, r: dict, pairs: list[dict], names: dict[str, str], connect_n
         bits = []
         for nm in names_m:
             m = _m(r, nm)
-            if not m:
-                bits.append(f"{nm}=—")
+            if not m or m.source in {"insufficient", "assumed"}:
                 continue
             scaled = f" → {m.scaled:.0f}" if m.scaled is not None else ""
             bits.append(f"{nm}={_fmt(m)}{scaled} [{m.source}]")
         score = r.get(graph)
-        fields.append((graph.title(), f"{_score(score)}/100. " + "; ".join(bits)))
+        if bits:
+            fields.append((graph.title(), f"{_score(score)}/100. " + "; ".join(bits)))
+        else:
+            fields.append((graph.title(), "not measured yet"))
 
     authn = _m(r, "authenticity")
     if authn and authn.present:
@@ -292,8 +294,13 @@ def _person(i: int, r: dict, pairs: list[dict], names: dict[str, str], connect_n
         if src in {"insufficient", "assumed"}:
             blanks.append(f"{name} ({src}: {basis})")
     if blanks:
-        action = connect_next[0]["line"] if connect_next else "see docs/connect.md"
-        fields.append(("Not measured", "; ".join(blanks[:8]) + f". Next: {action}"))
+        action = connect_next[0]["line"] if connect_next else (
+            "a Clay export or Bright Data key unlocks LinkedIn post counts"
+        )
+        fields.append((
+            "Not measured",
+            f"{len(blanks)} metrics need posts or an engager source. {action}.",
+        ))
 
     band = TIER_BAND.get(r.get("tier") or "?", "unknown")
     return {
@@ -786,5 +793,25 @@ def write(blocks: list[dict], fmts: list[str], out: str, *, title: str) -> list[
             path.write_bytes(body)  # type: ignore[arg-type]
         else:
             path.write_text(body, encoding="utf-8")  # type: ignore[arg-type]
+        written.append(str(path))
+    if "html" in fmts:
+        written.extend(_write_people(blocks, dest.parent / "people", title=title))
+    return written
+
+
+def _write_people(blocks: list[dict], folder, *, title: str) -> list[str]:
+    from pathlib import Path
+    people = [b for b in blocks if b.get("t") == "person"]
+    if not people:
+        return []
+    cover = next((b for b in blocks if b.get("t") == "cover"), None)
+    dest = Path(folder)
+    dest.mkdir(parents=True, exist_ok=True)
+    written = []
+    for b in people:
+        slug = re.sub(r"[^a-z0-9]+", "-", str(b.get("name") or b.get("id") or "person").lower()).strip("-")[:48]
+        mini = ([cover] if cover else []) + [b]
+        path = dest / f"{int(b.get('rank') or 0):02d}-{slug or 'person'}.html"
+        path.write_text(to_html(mini, title=str(b.get("name") or title)), encoding="utf-8")
         written.append(str(path))
     return written

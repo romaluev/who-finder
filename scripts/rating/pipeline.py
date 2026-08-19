@@ -44,8 +44,16 @@ def collect_lite(conn, cid: str, ts: str, *, max_spend: float | None = None,
         backend = step["backend"]
         if backend == "public":
             col = public.PublicCollector()
-            prof = col.profile(url)
-            posts = [] if has_posts else col.posts(url, n=20)
+            if public.is_blocked(url):
+                prof, posts = col.discover_linkedin(url)
+                if has_posts:
+                    posts = []
+            else:
+                prof = col.profile(url)
+                posts = [] if has_posts else col.posts(url, n=20)
+            if prof:
+                prof = {k: v for k, v in dict(prof).items() if v not in (None, "")}
+                prof["url"] = url
             added = _store_profile_posts(conn, cid, url, prof, posts, ts)
             if prof or added:
                 used.append("public")

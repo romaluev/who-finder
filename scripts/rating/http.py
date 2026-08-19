@@ -10,7 +10,7 @@ import urllib.request
 from typing import Any
 
 RETRYABLE = frozenset({429, 500, 502, 503, 504})
-UA = "Mozilla/5.0 (compatible; creator-rating/1.0; +https://github.com/romaluev/creator-rating)"
+UA = "Mozilla/5.0 (compatible; who-finder/4.0; +https://github.com/romaluev/who-finder)"
 
 
 class HTTPError(RuntimeError):

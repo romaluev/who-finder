@@ -25,10 +25,11 @@ def proxy_sets(creators: list[dict]) -> dict[str, set]:
             tokens.update(k for k, v in mix.items() if v)
         elif isinstance(mix, str) and mix:
             tokens.add(mix)
-        if c.get("source"):
-            tokens.add("src:" + str(c["source"]))
         if c.get("headline"):
             tokens.update(w.lower() for w in str(c["headline"]).split() if len(w) > 4)
+        # A shared ingest source is not audience overlap.
+        if len(tokens) < 2:
+            tokens = set()
         out[c["id"]] = tokens
     return out
 

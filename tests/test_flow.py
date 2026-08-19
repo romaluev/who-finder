@@ -28,7 +28,8 @@ def test_rate_sample_csv(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CREATOR_RATING_HOME", str(tmp_path))
     src = Path(__file__).resolve().parent / "fixtures" / "creators.csv"
     out = tmp_path / "rating"
-    assert main(["rate", str(src), "--out", str(out), "--format", "md,html", "--agent"]) == 0
+    assert main(["rate", str(src), "--out", str(out), "--format", "md,html",
+                 "--no-collect", "--agent"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["results"]["n"] == 3
     assert (tmp_path / "rating.md").exists()
