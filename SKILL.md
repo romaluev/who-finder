@@ -3,14 +3,14 @@ name: who-finder
 description: Deep public research on people or companies by scenario (operators, firms, creators, hiring, press, A vs B). Plans the queries, fetches public profiles, scores ICP fit with attributed reasons, ranks by priority, and keeps a seen-list so outreach only gets new names. Use when asked to find people, find companies, find creators, research a market, build a shortlist, qualify leads, see who is hiring, find journalists covering a topic, compare two scenes, search LinkedIn public profiles, find YouTube or TikTok talent, or export a prospect handoff CSV. Also use for "who should we pitch", "who is doing X", "give me names", "find me operators at", "who covers this beat". Not for sending email or DMs, not for logged-in LinkedIn or Sales Navigator scraping, not for CRM writes, and not for researching a topic with no people in it — that is last30days.
 license: Apache-2.0
 metadata:
-  version: "3.5.0"
+  version: "3.6.0"
 ---
 
 # SKILL CONTRACT — READ BEFORE ANY TOOL CALL
 
 You are inside the `who-finder` skill. This is a specific research engine with a defined output contract, not a prompt that means "go find some people."
 
-**The engine is `scripts/who_finder.py`.** It detects the scenario, plans the query angles, calls ScrapeCreators, fetches public profiles, scores ICP fit with attributed arithmetic, ranks by priority, de-dupes against a local roster, and renders the report. Every one of those steps lives in Python **specifically so you cannot improvise it**.
+**The engine is `scripts/who_finder.py`.** It detects the scenario, plans the query angles, searches public sources (DuckDuckGo always; Brave and ScrapeCreators when keys are present), optionally fetches public profiles, scores ICP fit with attributed arithmetic, ranks by priority, de-dupes against a local roster, and renders the report. Every one of those steps lives in Python **specifically so you cannot improvise it**. A missing ScrapeCreators key is a thinner run, not a reason to invent names.
 
 What you do: parse intent into one `find` call, run it, paste the `table`, add at most three sentences of your own.
 
@@ -45,7 +45,7 @@ Writing "there is nobody doing this" off an `unparsed` or `error` state is the m
 
 **LAW 6 — NEVER UPGRADE A BAND.** Bands come from `fit_band`. A row that was not enriched is capped at `MAYBE` no matter how good the snippet reads, because we never saw the profile. If the user pushes for a verdict on one name, run `enrich <id>` and let the engine re-score — do not promote it in prose.
 
-**LAW 7 — SPEND DELIBERATELY AND SAY THE NUMBER.** Every query angle is one credit; every enriched profile is one more. Before any run you expect to exceed ~20 credits, or any run where the user has signalled cost sensitivity, preview it with `--dry-run` and state the ceiling. After every run, `meta.credits_spent` is a fact you may be asked for. Never run the same `find` twice to "get more" — use `report` (0 credits) or `expand` (0 credits).
+**LAW 7 — SPEND DELIBERATELY AND SAY THE NUMBER.** A ScrapeCreators angle is one credit; DuckDuckGo, Brave, HN, and yt-dlp are free. Every enriched profile is one more credit. Before any run you expect to exceed ~20 credits, or any run where the user has signalled cost sensitivity, preview it with `--dry-run` (or `--cheap`) and state the ceiling. After every run, `meta.credits_spent` is a fact you may be asked for. Never run the same `find` twice to "get more" — use `report` (0 credits) or `expand` (0 credits). If `meta.thin` is true, say that profiles were not fetched.
 
 **LAW 8 — DO NOT MIX SCORES ACROSS PLATFORMS.** LinkedIn rows come from a Google index and have **no engagement data**. YouTube and TikTok rows have real view and like counts. `priority` is comparable across them because it is ICP-driven; raw `score` is not. Never write "this LinkedIn profile is more engaged than that YouTube channel."
 
@@ -78,12 +78,13 @@ Branch on `results.state`:
 
 | state | exit | do |
 |---|---|---|
-| `ready` | 0 | proceed |
-| `skipped-unconfigured` | 4 | **stop.** Tell the user to run `setup YOUR_KEY` (their own key, from scrapecreators.com) or `export SCRAPECREATORS_API_KEY=...`. Do not substitute WebSearch. Do not produce names. Point them at `docs/start.md` if they just cloned. |
-| `auth-failed` | 5 | **stop.** Their key is rejected — expired or wrong. |
-| `error` | 5 | report the message; do not retry more than once |
+| `ready` | 0 | proceed — full path (ScrapeCreators works) |
+| `ready-thin` | 0 | **proceed with a caveat.** Public search only; no profile pages. Tell the user the shortlist will be thinner, then run `find`. Offer `setup YOUR_KEY` for full profiles. Do not stop. Do not invent names. Do not substitute WebSearch. |
+| `auth-failed` | 0 | the ScrapeCreators key was rejected. **Thin path is still available.** Say the key failed, then proceed thin or they can `setup` a new key. Do not invent names. |
+| `error` | 0 | if `thin_available` is true, proceed thin. Otherwise report the message; do not retry more than once |
+| `skipped-unconfigured` | 0 | treat as `ready-thin` (legacy name) |
 
-Skip `doctor` only if a previous call in *this* session already returned `ready`.
+Skip `doctor` only if a previous call in *this* session already returned `ready` or `ready-thin`.
 
 `doctor --probe` spends one credit on a real YouTube search. Run it only when the user asks "is it actually working" — it is the only command that proves the live path end to end.
 
@@ -141,8 +142,9 @@ A brief is not a search query. `find` extracts the topic and builds angles from 
 
 | call | credits |
 |---|---|
-| each query angle in a plan | 1 |
-| each enriched entity under `--deep N` | 1, or 0 on a cache hit |
+| each ScrapeCreators query angle | 1 |
+| DuckDuckGo / Brave / HN / yt-dlp angle | 0 |
+| each enriched entity under `--deep N` | 1, or 0 on a cache hit; 0 without ScrapeCreators (snippet only) |
 | `report`, `expand`, `show`, `list`, `export`, `mark`, `icp`, `agent-context` | 0 |
 | `doctor` | 0 (1 with `--probe`) |
 

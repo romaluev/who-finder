@@ -179,13 +179,25 @@ def test_budget_allows_a_plan_that_fits(home, capsys, monkeypatch):
     assert payload["meta"]["dry_run"] is True
 
 
-def test_missing_key_is_a_branchable_envelope(home, capsys, monkeypatch):
+def test_missing_key_is_a_thin_run_not_a_hard_stop(home, capsys, monkeypatch):
     monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
-    code = cli.main(["find", "ai video", "--agent"])
-    payload = json.loads(capsys.readouterr().out)
-    assert code == agentio.E_AUTH
-    assert payload["error"]["code"] == agentio.E_AUTH
-    assert "SCRAPECREATORS_API_KEY" in payload["error"]["fix"]
+    monkeypatch.setattr(
+        "lib.providers.search_ddg",
+        lambda q, limit: (
+            [{
+                "url": "https://www.linkedin.com/in/jane-doe",
+                "title": "Jane Doe - Founder",
+                "snippet": "AI video",
+            }],
+            None,
+        ),
+    )
+    monkeypatch.setattr("lib.providers.search_ytdlp", lambda q, limit: ([], "off"))
+    monkeypatch.setattr("lib.providers.search_hn", lambda q, limit: ([], None))
+    monkeypatch.setattr("lib.providers.ytdlp_bin", lambda: "")
+    payload = _run(capsys, ["find", "ai video", "--agent"])
+    assert payload["meta"]["thin"] is True
+    assert "error" not in payload
 
 
 def test_malformed_icp_is_a_config_error_not_a_silent_fallback(home, capsys, monkeypatch):
@@ -321,8 +333,9 @@ def test_doctor_prints_a_readable_card_for_humans(home, capsys, monkeypatch):
     monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
     code = cli.main(["doctor"])
     out = capsys.readouterr().out
-    assert code == agentio.E_AUTH
-    assert "NOT SET UP" in out
+    assert code == 0
+    assert "READY" in out
+    assert "thinner" in out.lower() or "public search" in out.lower()
     assert "setup YOUR_KEY" in out
     assert "scrapecreators.com" in out
     assert not out.lstrip().startswith("{"), "humans should not be shown raw JSON"
@@ -332,7 +345,7 @@ def test_doctor_still_gives_agents_structured_results(home, capsys, monkeypatch)
     monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
     cli.main(["doctor", "--agent"])
     payload = json.loads(capsys.readouterr().out)
-    assert payload["results"]["state"] == "skipped-unconfigured"
+    assert payload["results"]["state"] == "ready-thin"
     assert payload["table"], "the human card rides along as `table`"
 
 

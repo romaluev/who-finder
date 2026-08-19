@@ -4,7 +4,7 @@ Start here if you just cloned the repo. None of these assume you write code.
 
 | guide | when |
 |---|---|
-| [Start](start.md) | first time — clone, key, first search |
+| [Start](start.md) | first time — clone, optional key, first search |
 | [What to ask](ask.md) | daily use — what to type to Cursor or Claude |
 | [Your key](key.md) | the key is missing, expired, or you want it on another machine |
 

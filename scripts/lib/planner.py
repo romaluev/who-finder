@@ -241,6 +241,28 @@ def plan(brief: str, scenario: str | None = None, extra_sources: list[str] | Non
     return _dedupe(p)
 
 
+OPTIONAL_WHEN_CHEAP = frozenset({"tiktok", "instagram"})
+
+
+def apply_cheap(plan: Plan, extra_sources: list[str] | None = None) -> Plan:
+    """One framing is already applied by the caller. Drop optional paid sources."""
+    named = set(extra_sources or [])
+    plan.steps = [
+        s for s in plan.steps
+        if s.source not in OPTIONAL_WHEN_CHEAP or s.source in named
+    ]
+    extra = "cheap: one framing; TikTok/Instagram skipped unless named; paid search saved for enrich"
+    plan.note = f"{plan.note}; {extra}" if plan.note else extra
+    return plan
+
+
+def add_free_extras(plan: Plan) -> Plan:
+    """HN Algolia is a free extra on press — no key, no credit."""
+    if plan.scenario == "press" and not any(s.source == "hn" for s in plan.steps):
+        plan.steps.append(Step(source="hn", query=plan.topic, label="hn", weight=0.4))
+    return plan
+
+
 def _dedupe(p: Plan) -> Plan:
     seen: set[tuple] = set()
     uniq: list[Step] = []

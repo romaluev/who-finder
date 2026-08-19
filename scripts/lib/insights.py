@@ -70,6 +70,7 @@ def findings(
     n_new: int,
     n_known: int,
     source_status: list[dict] | None = None,
+    thin: bool = False,
 ) -> list[str]:
     out: list[str] = []
     if not rows:
@@ -87,6 +88,12 @@ def findings(
                 f"No entities matched among the sources that parsed, but {n} "
                 f"{plural(n, 'source')} drifted (see GAPS). Treat this as partial."
             ]
+        failed = [s for s in steps if s.get("state") == "error"]
+        if failed and len(failed) == len(steps):
+            return [
+                "Every source failed (see GAPS). That is an outage, not evidence "
+                "that nobody matches. Do not report this as an empty market."
+            ]
         return ["No entities matched. Widen freshness or drop a source filter."]
 
     # Attach ids so landscape can join rows to dossiers even when the caller
@@ -98,7 +105,7 @@ def findings(
             r = rows[i]
             d["id"] = r.get("id") or f"{r.get('kind')}/{r.get('platform')}/{r.get('handle')}"
         ds.append(d)
-    out.extend(portrait.landscape(rows, ds, topic=topic, n_new=n_new, n_known=n_known))
+    out.extend(portrait.landscape(rows, ds, topic=topic, n_new=n_new, n_known=n_known, thin=thin))
     return out
 
 
@@ -114,8 +121,17 @@ def easy_to_miss(rows: list[dict], dossiers: list[dict]) -> list[str]:
     return [n["text"] for n in notices.of_set(rows, ds)]
 
 
-def gaps(dossiers: list[dict], source_status: list[dict], errors: list[str]) -> list[str]:
+def _run_was_thin(source_status: list[dict], thin: bool | None) -> bool:
+    if thin is not None:
+        return bool(thin)
+    backends = [s.get("backend") for s in (source_status or []) if s.get("backend")]
+    return bool(backends) and "scrapecreators" not in backends
+
+
+def gaps(dossiers: list[dict], source_status: list[dict], errors: list[str], *, thin: bool | None = None) -> list[str]:
     out = []
+    if _run_was_thin(source_status, thin):
+        out.append("public search only; no profile pages fetched.")
     dead = [s for s in (source_status or []) if s.get("state") == "error"]
     if dead:
         out.append(
@@ -163,7 +179,9 @@ def build(
     n_known: int,
     source_status: list[dict],
     errors: list[str],
+    thin: bool | None = None,
 ) -> dict:
+    was_thin = _run_was_thin(source_status, thin)
     return {
         "coverage": coverage(source_status),
         "findings": findings(
@@ -174,8 +192,10 @@ def build(
             n_new=n_new,
             n_known=n_known,
             source_status=source_status,
+            thin=was_thin,
         ),
         "notices": easy_to_miss(rows, dossiers),
         "clusters": clusters(dossiers),
-        "gaps": gaps(dossiers, source_status, errors),
+        "gaps": gaps(dossiers, source_status, errors, thin=was_thin),
+        "thin": was_thin,
     }

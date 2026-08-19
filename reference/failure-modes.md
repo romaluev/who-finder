@@ -118,8 +118,8 @@ Named so you can catch the shape in your own draft before the user does. Each en
 ## Setup failures
 
 ### missing key
-**Symptom:** `doctor` returns `skipped-unconfigured`, exit 4.
-**Fix:** stop and ask for `SCRAPECREATORS_API_KEY`. Inventing names is worse than reporting a missing key. Do not substitute WebSearch.
+**Symptom:** `doctor` returns `ready-thin`, exit 0.
+**Fix:** proceed with a caveat — public search only, no profile pages. Offer `setup YOUR_KEY` for the full path. Inventing names is worse than a thinner shortlist. Do not substitute WebSearch.
 
 ### cookie LinkedIn
 **Symptom:** a suggestion to log in and scrape, or to use Sales Navigator.

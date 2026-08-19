@@ -23,10 +23,12 @@ def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exi
     typed wrong but not what to type instead. This answers the second question.
     """
     key_lines = (
-        ["  2. A key     set — you're ready."]
+        ["  2. A key     set — full profiles and engagement numbers."]
         if key_set else
-        ["  2. A key     not set yet. Get one at https://scrapecreators.com,",
-         f"               then paste:  {invocation} setup YOUR_KEY"]
+        ["  2. A key     optional. Without one you still get a thinner shortlist",
+         "               from public search. Full profiles need a key from",
+         "               https://scrapecreators.com, then:",
+         f"               {invocation} setup YOUR_KEY"]
     )
     return "\n".join([
         "who-finder — describe who you're looking for, get back a shortlist",
@@ -43,16 +45,15 @@ def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exi
         f"  1. Python    {python}  — already here, good.",
         *key_lines,
         "",
-        "See it work before you spend anything — free, no key needed:",
+        "See it work — free, no key needed:",
+        f'    {invocation} find "founders of AI video tools" --deep 10',
         f'    {invocation} find "founders of AI video tools" --deep 10 --dry-run',
         "",
-        "That prints the exact searches it would run and what they'd cost.",
+        "That second command prints the exact searches and what they'd cost.",
         "",
-        "Once your key is set:",
+        "Once a ScrapeCreators key is set, doctor says READY and --deep fetches profiles:",
         f"    {invocation} doctor",
-        "        confirm the key works and see your balance",
         f'    {invocation} find "founders of AI video tools" --deep 10 --format md,html --out shortlist',
-        "        the real thing, written up as a document you can send",
         "",
         "Guides (in this folder):  docs/start.md   docs/ask.md   docs/key.md",
         "",
@@ -67,41 +68,59 @@ def doctor_card(r: dict) -> str:
     state = r.get("state", "unknown")
     headline = {
         "ready": "READY — everything works",
-        "skipped-unconfigured": "NOT SET UP — no API key yet",
-        "auth-failed": "KEY REJECTED — the API did not accept this key",
-        "error": "PROBLEM — see below",
+        "ready-thin": "READY — thinner path (public search, no profile pages)",
+        "skipped-unconfigured": "READY — thinner path (public search, no profile pages)",
+        "auth-failed": "KEY REJECTED — thin path still available",
+        "error": "PROBLEM — thin path still available" if r.get("thin_available") else "PROBLEM — see below",
     }.get(state, state)
     lines = [f"who-finder v{__version__}  ·  {headline}", ""]
 
     if r.get("key") == "missing":
         lines += [
-            "  API key    missing",
-            "             get one at https://scrapecreators.com",
-            "             then:  who-finder setup YOUR_KEY",
+            "  ScrapeCreators  not set — find still runs, thinner",
+            "                  full profiles: https://scrapecreators.com",
+            "                  then:  who-finder setup YOUR_KEY",
         ]
     else:
         src = r.get("key_source") or "set"
-        lines.append(f"  API key    present ({src})")
+        lines.append(f"  ScrapeCreators  present ({src})")
+    backends = r.get("backends") or {}
+    brave = backends.get("brave") or {}
+    if brave.get("available"):
+        lines.append(f"  Brave          present ({brave.get('source') or 'set'})")
+    else:
+        lines.append("  Brave          not set  (optional — setup --brave KEY)")
     if r.get("credits") is not None:
-        lines.append(f"  credits    {r['credits']} left")
+        lines.append(f"  credits        {r['credits']} left")
     if r.get("credits_error"):
-        lines.append(f"  credits    could not read — {r['credits_error']}")
+        lines.append(f"  credits        could not read — {r['credits_error']}")
 
     lines += [
-        f"  roster     {r.get('db')}" + ("" if r.get("db_exists") else "   (not created yet)"),
-        f"  fit rules  " + (str(r.get("icp")) if r.get("icp_exists") else "built-in generic rules"),
+        "  DuckDuckGo     always on  (LinkedIn / web / X identities)",
+        "  HN Algolia     always on  (press)",
+        f"  roster         {r.get('db')}" + ("" if r.get("db_exists") else "   (not created yet)"),
+        f"  fit rules      " + (str(r.get("icp")) if r.get("icp_exists") else "built-in generic rules"),
     ]
+    ytdlp = backends.get("ytdlp") or {}
+    if ytdlp.get("available"):
+        lines.append(f"  yt-dlp         {ytdlp.get('bin')}")
+    l30 = backends.get("last30days") or {}
+    if l30.get("available"):
+        lines.append(f"  last30days     {l30.get('bin')}  (compose only)")
     goat = r.get("contact_goat") or {}
     if goat.get("installed"):
-        lines.append(f"  contact-goat  installed at {goat.get('bin')}  (optional — work-email lookup)")
+        lines.append(f"  contact-goat   installed at {goat.get('bin')}  (optional — work-email lookup)")
     else:
-        lines.append("  contact-goat  not installed  (optional — we still print emails they published)")
+        lines.append("  contact-goat   not installed  (optional — we still print emails they published)")
     probe = r.get("probe")
     if probe:
-        lines.append(
-            f"  live test  {probe.get('youtube_hits')} results from YouTube — the whole path works"
-            if probe.get("ok") else f"  live test  FAILED — {probe.get('error')}"
-        )
+        if probe.get("skipped"):
+            lines.append(f"  live test      skipped — {probe.get('reason') or 'no ScrapeCreators'}")
+        else:
+            lines.append(
+                f"  live test      {probe.get('youtube_hits')} results from YouTube — the whole path works"
+                if probe.get("ok") else f"  live test      FAILED — {probe.get('error')}"
+            )
 
     lines.append("")
     if state == "ready":
@@ -110,14 +129,16 @@ def doctor_card(r: dict) -> str:
             '  find "founders of AI video tools" --deep 10 --dry-run   preview, free',
             '  find "founders of AI video tools" --deep 10             run it',
         ]
-    elif state == "skipped-unconfigured":
+    elif state in {"ready-thin", "skipped-unconfigured", "auth-failed"}:
         lines += [
-            "You can still preview searches without a key:",
-            '  find "founders of AI video tools" --deep 10 --dry-run',
+            "You can run find right now. It will be public search only.",
+            '  find "founders of AI video tools" --deep 10',
             "",
-            "When you have a key:",
+            "For full profiles and YouTube/TikTok numbers:",
             "  setup YOUR_KEY",
         ]
+        if r.get("fix") and state == "auth-failed":
+            lines.append(f"  {r['fix']}")
     else:
         lines.append(f"Fix: {r.get('fix') or 'check the key and try again'}")
     return "\n".join(lines)
@@ -137,18 +158,33 @@ def plan_card(plan, est: dict, *, depth: int, icp_name: str) -> str:
         "",
         f"PLANNED QUERIES ({len(plan.steps)})",
     ]
+    by_query = {s.get("query"): s for s in (est.get("steps") or []) if isinstance(s, dict)}
     for i, s in enumerate(plan.steps, 1):
         side = f" [side {s.side}]" if s.side else ""
-        lines.append(f" {i:>2}. {s.source:<19} {s.label:<12}{side}")
+        pred = by_query.get(s.query) or {}
+        via = pred.get("backend") or ""
+        cost = pred.get("credits")
+        tail = f"  via {via}" if via else ""
+        if cost is not None:
+            tail += f"  ({cost} cr)"
+        lines.append(f" {i:>2}. {s.source:<19} {s.label:<12}{side}{tail}")
         lines.extend(_wrap(s.query, bullet="     q: ", width=96))
     lines.append("")
     lines.append("COST CEILING")
-    lines.append(f"  discovery      {est['discovery']:>3} credits (1 per query above)")
-    if depth:
-        lines.append(f"  enrichment  <= {est['enrichment_max']:>3} credits (1 per profile, 0 on a cache hit)")
-    lines.append(f"  total       <= {est['total_max']:>3} credits")
+    if est.get("total_max") == 0:
+        lines.append("  discovery        $0  (every step is free)")
+        if depth:
+            lines.append("  enrichment       $0  (no ScrapeCreators — snippet dossiers only)")
+        lines.append("  total            $0")
+    else:
+        lines.append(f"  discovery      {est['discovery']:>3} credits (only ScrapeCreators steps)")
+        if depth:
+            lines.append(f"  enrichment  <= {est['enrichment_max']:>3} credits (1 per profile, 0 on a cache hit)")
+        lines.append(f"  total       <= {est['total_max']:>3} credits")
     lines.append("")
     lines.append("Re-run without --dry-run to execute. Add --max-credits N to hard-cap it.")
+    if est.get("thin"):
+        lines.append("note: public search only; no profile pages fetched.")
     if plan.note:
         lines.append(f"note: {plan.note}")
     return "\n".join(lines)

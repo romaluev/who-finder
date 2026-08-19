@@ -319,7 +319,7 @@ def audience_detail(d: dict, r: dict | None = None) -> str:
 
 
 def landscape(rows: list[dict], dossiers: list[dict], *, topic: str,
-              n_new: int, n_known: int) -> list[str]:
+              n_new: int, n_known: int, thin: bool = False) -> list[str]:
     """The opening of a research brief — who showed up and who to talk to."""
     if not rows:
         return []
@@ -337,6 +337,11 @@ def landscape(rows: list[dict], dossiers: list[dict], *, topic: str,
     where = ", ".join(f"{c} on {p}" for p, c in sorted(plats.items(), key=lambda x: -x[1]))
     newbit = f"{n_new} new to you" if n_new == n else f"{n_new} new, {n_known} already seen"
     out.append(f"{n} {plural(n, 'person', 'people')} — {newbit} — found {where}.")
+    if thin:
+        out.append(
+            "This run used public search only; no profile pages were fetched. "
+            "Fit is capped at MAYBE."
+        )
 
     # Who to talk to first: the top strong fits, named, with a reason.
     strong = [(r, d) for r, d in named if r.get("fit_band") == "strong"]

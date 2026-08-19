@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from . import http
+from . import http, providers
 from .identity import parse_identity
 from .scenarios import SCENARIOS
 from .score import apply_flags, entity_score, hit_score
@@ -447,7 +447,70 @@ def _kind_for(scenario: str, source: str) -> str:
     return spec.get("kind") or "person"
 
 
-def _run_one(
+SITE_HOST = {
+    "youtube": "youtube.com",
+    "tiktok": "tiktok.com",
+    "instagram": "instagram.com",
+}
+NATIVE = frozenset(SITE_HOST)
+
+
+def predict_backend(
+    source: str,
+    *,
+    has_sc: bool,
+    has_brave: bool,
+    cheap: bool = False,
+    has_ytdlp: bool | None = None,
+) -> dict:
+    """Which backend a step would use, and whether it spends a credit.
+
+    Used by `--dry-run` so the ceiling is 0 when every step is free.
+    """
+    if source == "hn":
+        return {"backend": "hn", "credits": 0}
+    if source in NATIVE:
+        if has_sc:
+            return {"backend": "scrapecreators", "credits": 1}
+        if source == "youtube" and (has_ytdlp if has_ytdlp is not None else bool(providers.ytdlp_bin())):
+            return {"backend": "ytdlp", "credits": 0}
+        return {"backend": "brave" if has_brave else "ddg", "credits": 0}
+    if source in GOOGLE_SOURCES or source in {"web", "reddit", "x"}:
+        if has_sc and not cheap:
+            return {"backend": "scrapecreators", "credits": 1}
+        return {"backend": "brave" if has_brave else "ddg", "credits": 0}
+    return {"backend": "ddg", "credits": 0}
+
+
+def _site_query(source: str, query: str) -> str:
+    host = SITE_HOST.get(source)
+    if host and f"site:{host}" not in query.lower():
+        return f"site:{host} {query}"
+    return query
+
+
+def _hits_from_web(items: list[dict], source: str, scenario_kind: str, limit: int) -> tuple[list[dict], dict]:
+    parse_source = source if source in GOOGLE_SOURCES else "web"
+    data = {"results": items}
+    hits = parse_google(data, limit, source=parse_source, scenario_kind=scenario_kind)
+    return hits, probe(data, parse_source)
+
+
+def _web_floor(query: str, limit: int, brave_token: str) -> tuple[list[dict], str, str | None]:
+    """Brave then DuckDuckGo. First success wins. Never raises."""
+    if brave_token:
+        items, err = providers.search_brave(brave_token, query, limit)
+        if not err:
+            return items, "brave", None
+        ddg_items, ddg_err = providers.search_ddg(query, limit)
+        if not ddg_err:
+            return ddg_items, "ddg", None
+        return [], "", ddg_err or err
+    items, err = providers.search_ddg(query, limit)
+    return items, "ddg", err
+
+
+def _run_sc(
     token: str,
     source: str,
     query: str,
@@ -474,6 +537,66 @@ def _run_one(
     return hits, probe(data, source)
 
 
+def _run_one(
+    token: str,
+    source: str,
+    query: str,
+    limit: int,
+    freshness: str,
+    scenario_kind: str,
+    *,
+    cheap: bool = False,
+    brave_token: str = "",
+) -> tuple[list[dict], dict]:
+    if source == "hn":
+        items, err = providers.search_hn(query, limit)
+        if err:
+            raise RuntimeError(err)
+        hits, pr = _hits_from_web(items, "web", scenario_kind, limit)
+        pr["backend"] = "hn"
+        pr["fell_back"] = False
+        pr["credits"] = 0
+        return hits, pr
+
+    if source not in GOOGLE_SOURCES and source not in NATIVE:
+        raise ValueError(f"unknown source {source}")
+
+    try_sc = bool(token) and not (cheap and source in GOOGLE_SOURCES)
+    last_err: Exception | None = None
+    fell_back = False
+
+    if try_sc:
+        try:
+            hits, pr = _run_sc(token, source, query, limit, freshness, scenario_kind)
+            pr["backend"] = "scrapecreators"
+            pr["fell_back"] = False
+            pr["credits"] = 1
+            return hits, pr
+        except Exception as exc:
+            last_err = exc
+            fell_back = True
+
+    if source == "youtube":
+        items, err = providers.search_ytdlp(query, limit)
+        if not err and items:
+            hits, pr = _hits_from_web(items, "web", scenario_kind, limit)
+            pr["backend"] = "ytdlp"
+            pr["fell_back"] = fell_back
+            pr["credits"] = 0
+            return hits, pr
+
+    q = _site_query(source, query) if source in NATIVE else query
+    items, backend, err = _web_floor(q, limit, brave_token)
+    if err:
+        detail = f"{last_err}; then {err}" if last_err else err
+        raise RuntimeError(detail)
+    hits, pr = _hits_from_web(items, source, scenario_kind, limit)
+    pr["backend"] = backend
+    pr["fell_back"] = fell_back
+    pr["credits"] = 0
+    return hits, pr
+
+
 def search_step(
     token: str,
     source: str,
@@ -484,12 +607,20 @@ def search_step(
     side: str = "",
     label: str = "",
     weight: float = 1.0,
+    *,
+    cheap: bool = False,
+    brave_token: str = "",
 ) -> tuple[list[dict], str | None, dict]:
     kind = _kind_for(scenario, source)
     try:
-        hits, pr = _run_one(token, source, query, limit, freshness, kind)
+        hits, pr = _run_one(
+            token, source, query, limit, freshness, kind,
+            cheap=cheap, brave_token=brave_token,
+        )
     except Exception as exc:
-        return [], f"{source}/{label or query}: {exc}", {"raw_n": 0, "keys": []}
+        return [], f"{source}/{label or query}: {exc}", {
+            "raw_n": 0, "keys": [], "backend": "", "fell_back": False, "credits": 0,
+        }
     out = []
     for h in hits:
         h = apply_flags(h)
@@ -501,11 +632,47 @@ def search_step(
     return out, None, pr
 
 
+def _status_entry(step, hits: list, err: str | None, pr: dict) -> dict:
+    raw_n = pr.get("raw_n", 0)
+    if err:
+        state = "error"
+    elif hits:
+        state = "ok"
+    elif raw_n or pr.get("stray_n"):
+        state = "unparsed"
+    elif pr.get("container") == "absent":
+        state = "unparsed"
+    else:
+        state = "no-results"
+    entry = {
+        "source": step.source,
+        "label": step.label,
+        "query": step.query,
+        "ok": not bool(err),
+        "n": len(hits),
+        "raw_n": raw_n,
+        "state": state,
+        "backend": pr.get("backend") or "",
+        "fell_back": bool(pr.get("fell_back")),
+        "credits": int(pr.get("credits") or 0),
+    }
+    if err:
+        entry["error"] = err
+    if state == "unparsed":
+        entry["response_keys"] = pr.get("keys") or []
+        entry["stray_n"] = pr.get("stray_n", 0)
+        entry["stray_at"] = pr.get("stray_at", "")
+    return entry
+
+
 def run_plan(
     token: str,
     plan,
     limit: int,
     freshness: str,
+    *,
+    cheap: bool = False,
+    brave_token: str = "",
 ) -> tuple[list[dict], list[dict], list[str], list[dict]]:
     """Execute every planned step. Returns entities, hits, errors, source_status."""
     all_hits: list[dict] = []
@@ -523,54 +690,19 @@ def run_plan(
             side=step.side,
             label=step.label,
             weight=step.weight,
+            cheap=cheap,
+            brave_token=brave_token,
         )
         if err:
             errors.append(err)
-            status.append(
-                {
-                    "source": step.source,
-                    "label": step.label,
-                    "query": step.query,
-                    "ok": False,
-                    "error": err,
-                    "n": 0,
-                    "raw_n": 0,
-                    "state": "error",
-                }
-            )
-            continue
-        for h in hits:
-            # Tag each hit with the query that produced it. With several framings
-            # in flight, "which phrasing surfaced this person" is a real finding,
-            # and it is lost the moment the hits are pooled.
-            h.setdefault("found_by", step.query)
-        all_hits.extend(hits)
-        raw_n = pr.get("raw_n", 0)
-        # A zero-hit step is only a real absence when our own container was
-        # there and empty. Records we could not read, or a container that has
-        # gone missing, are both parser failures wearing the same zero.
-        if hits:
-            state = "ok"
-        elif raw_n or pr.get("stray_n"):
-            state = "unparsed"
-        elif pr.get("container") == "absent":
-            state = "unparsed"
         else:
-            state = "no-results"
-        entry = {
-            "source": step.source,
-            "label": step.label,
-            "query": step.query,
-            "ok": True,
-            "n": len(hits),
-            "raw_n": raw_n,
-            "state": state,
-        }
-        if state == "unparsed":
-            entry["response_keys"] = pr.get("keys") or []
-            entry["stray_n"] = pr.get("stray_n", 0)
-            entry["stray_at"] = pr.get("stray_at", "")
-        status.append(entry)
+            for h in hits:
+                # Tag each hit with the query that produced it. With several framings
+                # in flight, "which phrasing surfaced this person" is a real finding,
+                # and it is lost the moment the hits are pooled.
+                h.setdefault("found_by", step.query)
+            all_hits.extend(hits)
+        status.append(_status_entry(step, hits, err, pr))
     entities = rollup_entities(all_hits, plan.scenario)[:limit]
     return entities, all_hits, errors, status
 

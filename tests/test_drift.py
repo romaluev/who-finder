@@ -76,7 +76,7 @@ def _run(capsys, argv):
     return json.loads(capsys.readouterr().out)
 
 
-def _empty_per_endpoint(url, params=None, headers=None, timeout=45):
+def _empty_per_endpoint(url, params=None, headers=None, timeout=45, **kwargs):
     """Each endpoint's own empty shape — an empty container, not a missing one."""
     if "/youtube/" in url:
         return {"success": True, "videos": []}

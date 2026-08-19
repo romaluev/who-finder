@@ -115,4 +115,4 @@ def test_build_returns_all_four_sections():
         source_status=[{"source": "youtube", "label": "yt", "state": "ok", "n": 3}],
         errors=[],
     )
-    assert set(out) == {"coverage", "findings", "notices", "clusters", "gaps"}
+    assert {"coverage", "findings", "notices", "clusters", "gaps"} <= set(out)

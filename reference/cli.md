@@ -223,7 +223,7 @@ Writes `~/.who-finder/key` (or `$WHO_FINDER_HOME/key`) at mode 0600. `export SCR
 $BIN doctor [--probe]
 ```
 
-Reports one of `ready`, `skipped-unconfigured`, `auth-failed`, `error`, plus the roster path, ICP path, credit balance, and whether `contact-goat-pp-cli` is on PATH (optional — work-email lookup). `--probe` spends one credit on a real YouTube search and is the only command that proves the live path end to end.
+Reports one of `ready`, `ready-thin`, `auth-failed`, `error`, plus a capability card per backend (DuckDuckGo, HN, ScrapeCreators, Brave, yt-dlp, last30days, contact-goat). Missing ScrapeCreators is `ready-thin` (usable), not a stop. A rejected key still notes that the thin path is available. `--probe` spends one credit on a real YouTube search and is the only command that proves the live paid path end to end.
 
 ### `agent-context` — self-description
 

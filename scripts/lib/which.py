@@ -13,7 +13,7 @@ INDEX = (
     {
         "needles": ("health", "doctor", "credit", "broken"),
         "run": "doctor --agent",
-        "note": "four-state: ready | skipped-unconfigured | auth-failed | error",
+        "note": "states: ready | ready-thin | auth-failed | error. thin is proceed-with-caveat",
     },
     {
         "needles": ("probe", "smoke", "is it working"),
@@ -35,6 +35,12 @@ INDEX = (
                     "before running", "estimate", "dry run"),
         "run": 'find "BRIEF" --deep 10 --dry-run --agent',
         "note": "prints the exact queries and the credit ceiling; spends nothing, needs no key",
+    },
+    {
+        "needles": ("don't spend", "dont spend", "cheap", "save credits", "fewer credits",
+                    "don't use credits", "free only"),
+        "run": 'find "BRIEF" --cheap --deep 10 --agent',
+        "note": "one framing, skip TikTok/Instagram unless named, save ScrapeCreators for enrich",
     },
     {
         "needles": ("cap", "limit spend", "max credits", "do not overspend"),

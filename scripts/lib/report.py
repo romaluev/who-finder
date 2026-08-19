@@ -71,6 +71,10 @@ def build(
                        ("New names", f"{n_new} not seen before, {n_known} already in the roster"),
                        ("Cost", f"{credits} credits" if credits else "0 credits (from stored data)"),
                    ]})
+    if ins.get("thin"):
+        blocks[-1]["meta"].append(
+            ("Depth", "public search only; no profile pages fetched")
+        )
 
     # ---- Summary -------------------------------------------------------
     blocks.append({"t": "h1", "text": "Summary"})

@@ -87,6 +87,12 @@ def test_cli_doctor_missing_key(monkeypatch, tmp_path, capsys):
     monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
     monkeypatch.setenv("WHO_FINDER_HOME", str(tmp_path))
     code = main(["doctor", "--agent"])
-    assert code == 4
+    assert code == 0
     out = capsys.readouterr().out
-    assert "missing" in out or "skipped" in out
+    assert "ready-thin" in out
+
+
+def test_which_dont_spend_is_cheap():
+    hit = resolve("don't spend")
+    assert hit["matched"] is True
+    assert "--cheap" in hit["run"]

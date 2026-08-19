@@ -73,7 +73,7 @@ YOUTUBE_CHANNEL = {
 }
 
 
-def fake_get(url, params=None, headers=None, timeout=45):
+def fake_get(url, params=None, headers=None, timeout=45, **kwargs):
     if "/v1/google/search" in url:
         q = (params or {}).get("query", "")
         return GOOGLE_PEOPLE if "linkedin.com/in" in q else {"results": []}
@@ -239,7 +239,7 @@ def test_dossier_survives_a_roundtrip_through_sqlite(wired, capsys):
 
 
 def test_enrichment_failure_degrades_to_the_search_snippet(monkeypatch, wired, capsys):
-    def flaky(url, params=None, headers=None, timeout=45):
+    def flaky(url, params=None, headers=None, timeout=45, **kwargs):
         if "/v1/linkedin/profile" in url:
             raise http.HTTPError(500, url, "boom")
         return fake_get(url, params, headers, timeout)

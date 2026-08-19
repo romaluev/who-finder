@@ -42,7 +42,7 @@ EXIT_CODES = {
     OK: "success",
     E_USAGE: "usage error — bad arguments or an unknown source/scenario",
     E_NOTFOUND: "not found — no such entity in the roster",
-    E_AUTH: "auth required — SCRAPECREATORS_API_KEY missing or rejected",
+    E_AUTH: "auth required — enrich / live profile fetch needs a working ScrapeCreators key",
     E_API: "upstream API error — the vendor failed or returned nonsense",
     E_BUDGET: "budget refused — the plan costs more than --max-credits allows",
     E_DELIVERY: "delivery failed — the --deliver sink could not be written",

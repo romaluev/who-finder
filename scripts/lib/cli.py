@@ -6,10 +6,11 @@ Two depths:
 
 `report` re-renders the deep brief from the local roster for zero credits.
 
-Because every search costs money, the cost gates come before the network:
-`--dry-run` prints the planned queries and the ceiling without spending or
-even needing a key, and `--max-credits` refuses an over-budget plan at exit 8
-rather than reporting the overspend afterwards.
+Missing ScrapeCreators is a thinner run, not a refusal. `--dry-run` prints
+the planned queries, which backend each step would use, and the ceiling
+(often $0). `--cheap` keeps one framing and saves paid credits for enrich.
+`--max-credits` refuses an over-budget plan at exit 8 rather than reporting
+the overspend afterwards.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from pathlib import Path
 from . import __version__, agentio, auth, contacts, db, emit, enrich, icp, insights, notices, report, sources
 from .agentio import E_API, E_AUTH, E_BUDGET, E_CONFIG, E_NOTFOUND, E_USAGE
 from .identity import parse_id
-from .planner import detect_scenario, plan as make_plan
+from .planner import add_free_extras, apply_cheap, detect_scenario, plan as make_plan
 from .scenarios import SCENARIOS, SOURCES
 from .which import resolve as which_resolve
 
@@ -86,8 +87,8 @@ COMMAND_HELP = {
              "1/new profile, 0 discovery"),
     "enrich": ("dossier + ICP fit for stored entities", "1/entity, 0 cached"),
     "expand": ("similar profiles / employees out of a stored dossier", "0"),
-    "setup": ("save your API key so it survives a new terminal", "0"),
-    "doctor": ("key, roster path, credits, four-state health", "0, or 1 with --probe"),
+    "setup": ("save ScrapeCreators and optional Brave keys so they survive a new terminal", "0"),
+    "doctor": ("backends, roster path, credits; ready vs ready-thin", "0, or 1 with --probe"),
     "agent-context": ("machine-readable description of this whole CLI", "0"),
     "which": ("map a capability phrase to a command", "0"),
     "scenarios": ("list engine-owned search types", "0"),
@@ -192,21 +193,50 @@ def _parse_sources(raw: str | None) -> list[str] | None:
     return srcs
 
 
-def _estimate(plan, depth: int) -> dict:
+def _estimate(plan, depth: int, *, cheap: bool = False, has_sc: bool = False, has_brave: bool = False) -> dict:
     """Credit cost of a plan before any of it is spent.
 
-    Discovery is one credit per query angle; enrichment is one per entity, and
-    only up to the number of entities discovery can actually return. Cached
-    profile reads cost nothing, so this is a ceiling rather than a forecast.
+    A ScrapeCreators angle is one credit; DuckDuckGo, Brave, HN, and yt-dlp
+    are free. Enrichment is one per entity and only exists when ScrapeCreators
+    is present. Cached profile reads cost nothing, so this is a ceiling.
     """
-    discovery = len(plan.steps)
-    enrichment = max(0, int(depth or 0))
+    steps = []
+    discovery = 0
+    for s in plan.steps:
+        pred = sources.predict_backend(
+            s.source, has_sc=has_sc, has_brave=has_brave, cheap=cheap
+        )
+        discovery += int(pred["credits"])
+        steps.append(
+            {
+                "source": s.source,
+                "label": s.label,
+                "query": s.query,
+                "weight": s.weight,
+                "side": s.side,
+                "backend": pred["backend"],
+                "credits": pred["credits"],
+            }
+        )
+    enrichment = max(0, int(depth or 0)) if has_sc else 0
+    total = discovery + enrichment
     return {
         "discovery": discovery,
         "enrichment_max": enrichment,
-        "total_max": discovery + enrichment,
-        "note": "enrichment is a ceiling: cached profiles cost 0",
+        "total_max": total,
+        "note": (
+            "all free — public search only; no profile pages fetched"
+            if total == 0
+            else "enrichment is a ceiling: cached profiles cost 0"
+        ),
+        "steps": steps,
+        "thin": not has_sc,
     }
+
+
+def _already_enriched(conn, row: dict) -> bool:
+    stored = db.get_dossier(conn, row["kind"], row["platform"], row["handle"])
+    return bool(stored and stored.get("enriched"))
 
 
 def _score_rows(conn, rows: list[dict], dossiers: dict[str, dict], cfg: dict, ts: str) -> dict[str, dict]:
@@ -244,31 +274,38 @@ def cmd_setup(args: argparse.Namespace) -> int:
     `export` is forgotten when the window closes. That is the usual reason a
     clone looks broken the next morning. This writes ~/.who-finder/key (or
     $WHO_FINDER_HOME/key) at mode 0600 and never prints the secret back.
+    Brave goes in keys.json via `--brave`.
     """
+    which = "brave" if getattr(args, "brave", False) else "scrapecreators"
     if getattr(args, "clear", False):
-        gone = auth.clear()
+        gone = auth.clear(which)
+        label = "Brave key" if which == "brave" else "saved key"
         payload = {
             "meta": {"source": "who-finder", "version": __version__},
-            "table": "Removed the saved key." if gone else "No saved key file to remove.",
-            "results": {"cleared": gone, "path": str(auth.key_file())},
+            "table": f"Removed the {label}." if gone else f"No {label} file to remove.",
+            "results": {"cleared": gone, "name": which, "path": str(auth.keys_file() if which == "brave" else auth.key_file())},
         }
         return _emit(payload, args.agent, args)
 
     key = (args.key or "").strip()
     if not key:
         token, source = auth.read()
+        brave, brave_src = auth.read_named("brave")
         lines = [
-            "who-finder setup — one key, then you can ask.",
+            "who-finder setup — keys are optional. Without one you still get a thinner shortlist.",
             "",
-            f"  key file   {auth.key_file()}",
-            f"  now        {'set (' + source + ')' if token else 'not set yet'}",
+            f"  ScrapeCreators  {auth.key_file()}",
+            f"  now             {'set (' + source + ')' if token else 'not set yet'}",
+            f"  Brave           {'set (' + brave_src + ')' if brave else 'not set (optional)'}",
             "",
-            "Get a key at https://scrapecreators.com (your own, not a teammate's).",
-            "Then paste it once:",
+            "Full profiles and YouTube/TikTok engagement need ScrapeCreators:",
             f"  {_invocation()} setup YOUR_KEY",
+            "  get one at https://scrapecreators.com (your own, not a teammate's).",
             "",
-            "After that, open a new terminal and run doctor — it should say READY.",
-            "The key stays on this machine. Do not commit it, do not Slack it.",
+            "Optional, free-tier web search that spends no ScrapeCreators credits:",
+            f"  {_invocation()} setup --brave YOUR_BRAVE_KEY",
+            "",
+            "The keys stay on this machine. Do not commit them, do not Slack them.",
         ]
         return _emit(
             {
@@ -277,6 +314,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
                 "results": {
                     "key": "set" if token else "missing",
                     "key_source": source,
+                    "brave": "set" if brave else "missing",
+                    "brave_source": brave_src,
                     "path": str(auth.key_file()),
                     "url": "https://scrapecreators.com",
                 },
@@ -284,12 +323,13 @@ def cmd_setup(args: argparse.Namespace) -> int:
             args.agent, args,
         )
     try:
-        path = auth.save(key)
+        path = auth.save(key, name=which)
     except ValueError as exc:
-        return _die(args, E_USAGE, str(exc),
-                    fix="get a key at https://scrapecreators.com and paste the whole thing")
+        hint = "https://brave.com/search/api/" if which == "brave" else "https://scrapecreators.com"
+        return _die(args, E_USAGE, str(exc), fix=f"get a key at {hint} and paste the whole thing")
+    label = "Brave key" if which == "brave" else "Key"
     lines = [
-        "Key saved. It will still be here the next time you open a terminal.",
+        f"{label} saved. It will still be here the next time you open a terminal.",
         f"  {path}",
         "",
         "Next:",
@@ -302,7 +342,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         {
             "meta": {"source": "who-finder", "version": __version__},
             "table": "\n".join(lines),
-            "results": {"saved": True, "path": str(path), "key_source": f"file:{path}"},
+            "results": {"saved": True, "name": which, "path": str(path), "key_source": f"file:{path}"},
         },
         args.agent, args,
     )
@@ -312,21 +352,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     token = _token()
     path = Path(args.db) if args.db else db.default_db()
     icp_path = icp.config_path(getattr(args, "icp", None))
+    caps = auth.capabilities()
     payload = {
         "meta": {"source": "who-finder", "version": __version__},
         # `table` is what a human sees; agents read `results`. Rendered at the
         # end of the command so it reflects the probe and credit results.
         "results": {
-            "state": "skipped-unconfigured" if not token else "ready",
+            "state": "ready" if token else "ready-thin",
             "key": "set" if token else "missing",
             "key_source": auth.read()[1],
             "env": ENV_KEY,
+            "thin_available": True,
             "db": str(path),
             "db_exists": path.exists(),
             "icp": str(icp_path),
             "icp_exists": icp_path.exists(),
             "scenarios": list(SCENARIOS),
             "sources": list(SOURCES),
+            "backends": caps,
             "contact_goat": {
                 "installed": bool(contacts.contact_goat_bin()),
                 "bin": contacts.contact_goat_bin(),
@@ -338,13 +381,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     }
     if not token:
         payload["results"]["fix"] = (
+            f"thin path is ready. for full profiles: "
             f"who-finder setup YOUR_KEY   or   export {ENV_KEY}=...  "
             "(your own key from https://scrapecreators.com)"
         )
         payload["results"]["api"] = "untested"
         payload["table"] = emit.doctor_card(payload["results"])
-        _emit(payload, args.agent, args)
-        return E_AUTH
+        return _emit(payload, args.agent, args)
     try:
         credits = sources.http.get(
             f"{sources.SC}/v1/credit-balance",
@@ -357,27 +400,34 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except sources.http.HTTPError as exc:
         payload["results"]["credits_error"] = str(exc)
         payload["results"]["api"] = "auth-failed" if exc.status in {401, 403} else "error"
-        payload["results"]["state"] = payload["results"]["api"]
+        payload["results"]["state"] = "auth-failed" if exc.status in {401, 403} else "ready-thin"
+        payload["results"]["thin_available"] = True
+        payload["results"]["fix"] = (
+            "ScrapeCreators rejected the key, but the thin public-search path "
+            "is still available. setup a new key for full profiles, or run find anyway."
+            if exc.status in {401, 403}
+            else "ScrapeCreators is down; thin public-search path is still available."
+        )
         payload["table"] = emit.doctor_card(payload["results"])
-        _emit(payload, args.agent, args)
-        return E_API
+        return _emit(payload, args.agent, args)
     except Exception as exc:
         payload["results"]["credits_error"] = str(exc)
         payload["results"]["api"] = "error"
-        payload["results"]["state"] = "error"
+        payload["results"]["state"] = "ready-thin"
+        payload["results"]["thin_available"] = True
+        payload["results"]["fix"] = "ScrapeCreators could not be reached; thin path is still available."
         payload["table"] = emit.doctor_card(payload["results"])
-        _emit(payload, args.agent, args)
-        return E_API
+        return _emit(payload, args.agent, args)
     if getattr(args, "probe", False):
         try:
             hits = sources.youtube(token, "youtube", 3, "month")
             payload["results"]["probe"] = {"youtube_hits": len(hits), "ok": True}
         except Exception as exc:
             payload["results"]["probe"] = {"ok": False, "error": str(exc)}
-            payload["results"]["state"] = "error"
+            payload["results"]["state"] = "ready-thin"
+            payload["results"]["thin_available"] = True
             payload["table"] = emit.doctor_card(payload["results"])
-            _emit(payload, args.agent, args)
-            return E_API
+            return _emit(payload, args.agent, args)
     payload["table"] = emit.doctor_card(payload["results"])
     return _emit(payload, args.agent, args)
 
@@ -424,23 +474,25 @@ def cmd_find(args: argparse.Namespace) -> int:
     except ValueError as exc:
         return _die(args, E_USAGE, str(exc), fix=f"pick from {list(SOURCES)}", allowed=list(SOURCES))
     token = _token()
-    if not token and not dry:
-        return _die(args, E_AUTH, f"missing {ENV_KEY}",
-                    fix=f"export {ENV_KEY}=... — the recipient supplies their own key "
-                        "from https://scrapecreators.com")
+    brave = auth.brave_token()
+    cheap = bool(getattr(args, "cheap", False))
+    n_frames = 1 if cheap else max(1, int(getattr(args, "frames", 3) or 1))
     p = make_plan(
         args.brief,
         scenario=forced,
         extra_sources=extra,
         extra_frames=getattr(args, "frame", None),
-        n_frames=max(1, int(getattr(args, "frames", 3) or 1)),
+        n_frames=n_frames,
     )
+    if cheap:
+        apply_cheap(p, extra)
+    add_free_extras(p)
     if not p.steps:
         return _die(args, E_USAGE, "planner produced zero steps for this brief",
                     fix="give a brief with a topic in it, or force one with --scenario")
 
     depth = max(0, int(args.deep or 0))
-    est = _estimate(p, depth)
+    est = _estimate(p, depth, cheap=cheap, has_sc=bool(token), has_brave=bool(brave))
 
     # Cost gates run before the first request, because a budget check that
     # fires after the spend is just a receipt.
@@ -456,17 +508,20 @@ def cmd_find(args: argparse.Namespace) -> int:
         return _emit(
             {
                 "meta": {"source": "who-finder", "version": __version__, "dry_run": True,
-                         "scenario": p.scenario, "kind": p.kind, "credits_spent": 0},
+                         "scenario": p.scenario, "kind": p.kind, "credits_spent": 0,
+                         "thin": est["thin"], "cheap": cheap},
                 "plan": p.as_dict(),
                 "table": emit.plan_card(p, est, depth=depth, icp_name=icp.load(args.icp, topic=p.topic).get("name", "generic")),
-                "results": {"estimate": est, "steps": p.as_dict()["steps"]},
+                "results": {"estimate": est, "steps": est["steps"]},
             },
             args.agent, args,
         )
 
-    entities, hits, errors, source_status = sources.run_plan(token, p, args.limit, args.freshness)
+    entities, hits, errors, source_status = sources.run_plan(
+        token, p, args.limit, args.freshness, cheap=cheap, brave_token=brave
+    )
     dossiers: dict[str, dict] = {}
-    spent = len(p.steps)
+    spent = sum(int(s.get("credits") or 0) for s in source_status)
 
     conn = _db(args)
     ts = db.now()
@@ -479,13 +534,16 @@ def cmd_find(args: argparse.Namespace) -> int:
             out = [r for r in out if r.get("novelty") == "new" or r.get("status") == "new"]
             n_new, n_known = len(out), 0
 
-        if depth:
+        if depth and token:
             queue = out[:depth] if not args.new_only else [r for r in out if r.get("novelty") == "new"][:depth]
-            dossiers, enrich_errors, enrich_spent = enrich.enrich_many(
-                token, queue, limit=depth, cache=args.cache
-            )
-            errors.extend(enrich_errors)
-            spent += enrich_spent
+            if cheap:
+                queue = [r for r in queue if not _already_enriched(conn, r)]
+            if queue:
+                dossiers, enrich_errors, enrich_spent = enrich.enrich_many(
+                    token, queue, limit=depth, cache=args.cache
+                )
+                errors.extend(enrich_errors)
+                spent += enrich_spent
 
         cfg = icp.load(args.icp, topic=p.topic)
         full = _score_rows(conn, out, dossiers, cfg, ts)
@@ -495,6 +553,7 @@ def cmd_find(args: argparse.Namespace) -> int:
 
     rows = icp.rank(out)
     step_labels = [f"{s.source}:{s.label}" for s in p.steps]
+    thin = not token or not any(s.get("backend") == "scrapecreators" for s in source_status)
     ins = insights.build(
         rows,
         [full[_ident(r)] for r in rows if _ident(r) in full],
@@ -504,6 +563,7 @@ def cmd_find(args: argparse.Namespace) -> int:
         n_known=n_known,
         source_status=source_status,
         errors=errors,
+        thin=thin,
     )
     if getattr(args, "format", "text") != "text":
         # A file report covers exactly the rows that were enriched, since an
@@ -571,6 +631,9 @@ def cmd_find(args: argparse.Namespace) -> int:
             "icp": cfg.get("name", "generic"),
             "icp_path": cfg.get("_path", ""),
             "credits_spent": spent,
+            "thin": thin,
+            "cheap": cheap,
+            "mode": "thin" if thin else "full",
         },
         "plan": p.as_dict(),
         "table": table,
@@ -1021,11 +1084,14 @@ def cmd_agent_context(args: argparse.Namespace) -> int:
                 },
                 "cost_model": {
                     "discovery_per_query_angle": 1,
+                    "free_backends": ["ddg", "brave", "hn", "ytdlp"],
                     "enrichment_per_entity": 1,
                     "cached_profile": 0,
                     "report_expand_show_export_mark": 0,
                     "preview": "find <brief> --dry-run --agent",
+                    "thin_without_key": True,
                 },
+                "doctor_states": ["ready", "ready-thin", "auth-failed", "error"],
             },
         },
         args.agent, args,
@@ -1120,14 +1186,11 @@ def cmd_signals(args: argparse.Namespace) -> int:
 def cmd_search(args: argparse.Namespace) -> int:
     """One raw keyword, one source. Debug hatch — find is the primary verb."""
     token = _token()
-    if not token:
-        return _die(args, E_AUTH, f"missing {ENV_KEY}",
-                    fix=f"export {ENV_KEY}=... — the recipient supplies their own key "
-                        "from https://scrapecreators.com")
     srcs = _parse_sources(args.sources) or ["youtube"]
     scenario = detect_scenario(args.query, None)
     hits, err, _ = sources.search_step(
-        token, srcs[0], args.query, args.limit, args.freshness, scenario
+        token, srcs[0], args.query, args.limit, args.freshness, scenario,
+        brave_token=auth.brave_token(),
     )
     errors = [err] if err else []
     entities = sources.rollup_entities(hits, scenario)
@@ -1482,7 +1545,8 @@ def main(argv: list[str] | None = None) -> int:
 
     su = sub.add_parser("setup", parents=[shared],
                         help="save your API key so it survives a new terminal")
-    su.add_argument("key", nargs="?", help="the key from scrapecreators.com")
+    su.add_argument("key", nargs="?", help="the key from scrapecreators.com (or Brave with --brave)")
+    su.add_argument("--brave", action="store_true", help="save a Brave Search key instead")
     su.add_argument("--clear", action="store_true", help="forget the saved key file")
     su.set_defaults(fn=cmd_setup)
 
@@ -1537,6 +1601,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="print the exact queries and the credit ceiling, spend nothing")
     f.add_argument("--max-credits", type=int, default=None, metavar="N",
                    help="refuse (exit 8) if the plan could cost more than N")
+    f.add_argument("--cheap", action="store_true",
+                   help="one framing, skip TikTok/Instagram unless named, save ScrapeCreators for enrich")
     f.set_defaults(fn=cmd_find)
 
     en = sub.add_parser("enrich", parents=[shared, deep], help="dossier + ICP fit for stored entities")

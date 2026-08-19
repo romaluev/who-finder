@@ -5,10 +5,10 @@ Describe who you're looking for. Get back a shortlist of real people — who the
 ```bash
 git clone https://github.com/romaluev/who-finder
 cd who-finder
-./who-finder setup YOUR_KEY
+./who-finder find "founders of AI video tools" --deep 10
 ```
 
-Then ask your assistant, or run one command. That is the whole setup. **[Start here →](docs/start.md)**
+No key required for a thinner public-search shortlist. A ScrapeCreators key unlocks full profiles. **[Start here →](docs/start.md)**
 
 ---
 
@@ -27,7 +27,7 @@ Everyone is ranked. Every score shows its working. Anyone the tool couldn't full
 
 ## Start in three minutes
 
-You need Python 3.9+ (already on every Mac) and a key from [scrapecreators.com](https://scrapecreators.com). No `pip`, no build.
+You need Python 3.9+ (already on every Mac). No `pip`, no build. A key from [scrapecreators.com](https://scrapecreators.com) is optional — without it you still get a thinner shortlist.
 
 **You use Cursor or Claude** — clone into the skills folder so you can just ask:
 
@@ -47,9 +47,9 @@ cd who-finder
 ./who-finder find "founders of AI video tools" --deep 10 --dry-run
 ```
 
-`--dry-run` is free and needs no key. It prints the exact searches and what they would cost.
+`--dry-run` is free and needs no key. It prints the exact searches, which backend each step would use, and the credit ceiling ($0 when every step is free).
 
-Full walkthrough, including "it says NOT SET UP": **[docs/start.md](docs/start.md)**
+Full walkthrough, including the thinner no-key path: **[docs/start.md](docs/start.md)**
 
 ## Guides
 
@@ -62,7 +62,7 @@ Full walkthrough, including "it says NOT SET UP": **[docs/start.md](docs/start.m
 
 ## What it costs
 
-Each search and each profile it reads is one credit on your ScrapeCreators key. A typical "top 10, written up" run is about 15 credits. You can see the number before spending, and set a hard cap it will not exceed.
+DuckDuckGo, Brave, and Hacker News are free. Each ScrapeCreators search and each profile it reads is one credit. A typical *full* "top 10, written up" run is about 15 credits. `--cheap` saves those credits for enrich. You can see the number before spending, and set a hard cap it will not exceed.
 
 ## What it won't do
 
@@ -99,7 +99,7 @@ Fit is a local JSON file you own. Two worked examples ship in `assets/`.
 ```bash
 ./who-finder                  # what to do next — safe with no key
 ./who-finder setup YOUR_KEY   # save the key so tomorrow still works
-./who-finder doctor           # READY / NOT SET UP / KEY REJECTED
+./who-finder doctor           # READY (full) / READY (thinner) / KEY REJECTED
 ./who-finder find "founders of AI video tools" --deep 10 --dry-run
 ./who-finder find "founders of AI video tools" --deep 10 --format md,html --out shortlist
 ./who-finder contacts         # emails they published

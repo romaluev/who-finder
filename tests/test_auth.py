@@ -61,3 +61,15 @@ def test_who_finder_home_hides_the_real_home_key(tmp_path, monkeypatch):
     monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
     assert auth.token() == ""
     assert auth.key_file() == tmp_path / "key"
+
+
+def test_brave_key_file_and_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("WHO_FINDER_HOME", str(tmp_path))
+    monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+    assert auth.brave_token() == ""
+    auth.save("BSA_file_brave_key_1", name="brave")
+    assert auth.brave_token() == "BSA_file_brave_key_1"
+    monkeypatch.setenv("BRAVE_API_KEY", "BSA_env_brave_key_1")
+    token, source = auth.read_named("brave")
+    assert token == "BSA_env_brave_key_1"
+    assert source == "env"
