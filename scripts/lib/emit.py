@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import textwrap
 
-from . import __version__
+from . import __version__, contacts
 from .scenarios import SCENARIOS
 from .util import human, to_int
 
@@ -55,7 +55,8 @@ def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exi
         f'    {invocation} find "founders of AI video tools" --deep 10 --format md,pdf --out shortlist',
         "        the real thing, written up as a document you can send",
         "",
-        "It never sends email, never logs into LinkedIn, and never invents a name.",
+        "It never sends email, never logs into LinkedIn, and never invents a name",
+        "or an inbox. Emails in the report are ones they published themselves.",
         f"Stuck? {invocation} help lists everything.",
     ])
 
@@ -88,6 +89,11 @@ def doctor_card(r: dict) -> str:
         f"  roster     {r.get('db')}" + ("" if r.get("db_exists") else "   (not created yet)"),
         f"  fit rules  " + (str(r.get("icp")) if r.get("icp_exists") else "built-in generic rules"),
     ]
+    goat = r.get("contact_goat") or {}
+    if goat.get("installed"):
+        lines.append(f"  contact-goat  installed at {goat.get('bin')}  (optional — work-email lookup)")
+    else:
+        lines.append("  contact-goat  not installed  (optional — we still print emails they published)")
     probe = r.get("probe")
     if probe:
         lines.append(
@@ -179,6 +185,12 @@ def brief(
     for f in ins.get("findings") or ["(nothing to summarise)"]:
         lines.extend(_wrap(f, bullet="- "))
 
+    if ins.get("notices"):
+        lines.append("")
+        lines.append("EASY TO MISS")
+        for n in ins["notices"][:8]:
+            lines.extend(_wrap(n, bullet="- "))
+
     lines.append("")
     lines.append("WHO TO CONTACT   priority = 60% ICP fit + 25% reach + new-name bonus")
     ranked = rows[:show]
@@ -238,6 +250,9 @@ def _card(i: int, r: dict, d: dict) -> list[str]:
     url = r.get("url") or d.get("url") or r.get("sample_url") or ""
     if url:
         out.append(f"      url   {url}")
+    reach = contacts.reach_line(d.get("contacts") or contacts.harvest(d))
+    if reach:
+        out.extend(_prefixed("reach ", reach))
     return out
 
 
@@ -246,6 +261,55 @@ def _prefixed(label: str, text: str, width: int = 88) -> list[str]:
     first = f"      {label} {wrapped[0]}"
     rest = [" " * (7 + len(label)) + w for w in wrapped[1:]]
     return [first] + rest
+
+
+def contacts_card(people: list[dict], *, goat: str | None = None) -> str:
+    """The `contacts` command: public addresses only, named as such."""
+    lines = [
+        f"who-finder v{__version__}  PUBLIC CONTACTS — only what they published",
+        "Nothing here is a guessed work email. Those are a different tool.",
+        "",
+    ]
+    if not people:
+        lines.append("(no stored profiles to harvest)")
+        return "\n".join(lines)
+    n_email = sum(1 for p in people if p.get("emails"))
+    n_meet = sum(1 for p in people if p.get("takes_meetings"))
+    lines.append(f"{len(people)} people  ·  {n_email} published an email  ·  {n_meet} book meetings in public")
+    lines.append("")
+    for i, p in enumerate(people, 1):
+        lines.append(f"{i:>2}. {p.get('name') or p.get('id')}")
+        if p.get("emails"):
+            lines.append(f"      email  {', '.join(p['emails'])}")
+        if p.get("reach"):
+            lines.append(f"      reach  {p['reach']}")
+        elif p.get("links"):
+            shown = []
+            for l in p["links"][:4]:
+                if isinstance(l, dict):
+                    shown.append(l.get("url") or "")
+                else:
+                    shown.append(str(l))
+            shown = [s for s in shown if s]
+            if shown:
+                lines.append(f"      links  {' · '.join(shown)}")
+        if p.get("id"):
+            lines.append(f"      id     {p['id']}")
+    if goat:
+        lines += [
+            "",
+            "contact-goat is installed. To look up a work email the profile did not",
+            "publish, ask first — it spends other credits — then:",
+            f"  {goat} doctor --agent",
+            f'  {goat} dossier "NAME" --company "CO" --agent',
+        ]
+    else:
+        lines += [
+            "",
+            "No contact-goat on PATH. Install it only if you want guessed work emails",
+            "or warm intros; this command will keep printing what they published.",
+        ]
+    return "\n".join(lines)
 
 
 def dossier_card(d: dict, r: dict | None = None) -> str:
@@ -278,6 +342,13 @@ def dossier_card(d: dict, r: dict | None = None) -> str:
         lines.append(f"  similar   {sim.get('name')}  {sim.get('url')}")
     for link in (payload.get("links") or [])[:5]:
         lines.append(f"  link      {link}")
+    c = d.get("contacts") or contacts.harvest({**payload, **d})
+    if c.get("emails"):
+        lines.append(f"  email     {', '.join(c['emails'])}")
+    if c.get("takes_meetings"):
+        cal = next((l["url"] for l in c.get("links") or []
+                    if l.get("kind") in {"calendly", "calendar"}), "")
+        lines.append(f"  meetings  {cal or 'yes'}")
     if d.get("bio"):
         lines.extend(_wrap(d["bio"][:400], bullet="  bio       "))
     for gap in (d.get("fit_gaps") or [])[:4]:

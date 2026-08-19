@@ -3,7 +3,7 @@ name: who-finder
 description: Deep public research on people or companies by scenario (operators, firms, creators, hiring, press, A vs B). Plans the queries, fetches public profiles, scores ICP fit with attributed reasons, ranks by priority, and keeps a seen-list so outreach only gets new names. Use when asked to find people, find companies, find creators, research a market, build a shortlist, qualify leads, see who is hiring, find journalists covering a topic, compare two scenes, search LinkedIn public profiles, find YouTube or TikTok talent, or export a prospect handoff CSV. Also use for "who should we pitch", "who is doing X", "give me names", "find me operators at", "who covers this beat". Not for sending email or DMs, not for logged-in LinkedIn or Sales Navigator scraping, not for CRM writes, and not for researching a topic with no people in it — that is last30days.
 license: Apache-2.0
 metadata:
-  version: "3.2.0"
+  version: "3.4.0"
 ---
 
 # SKILL CONTRACT — READ BEFORE ANY TOOL CALL
@@ -20,7 +20,7 @@ What you never do: search for names yourself, write HTTP, invent a ranking, judg
 
 ---
 
-# OUTPUT CONTRACT — THE TWELVE LAWS
+# OUTPUT CONTRACT — THE THIRTEEN LAWS
 
 These dominate every other instruction in this file. If you are about to violate one, stop and regenerate.
 
@@ -51,11 +51,13 @@ Writing "there is nobody doing this" off an `unparsed` or `error` state is the m
 
 **LAW 9 — NEVER PRINT A MASK.** LinkedIn hides job history on public profiles and returns asterisk strings like `*******`. The engine detects this, falls back to the search snippet, and tags the row `masked-profile`. If you ever see a run of asterisks in your drafted output, delete it — do not present it as a redacted title.
 
-**LAW 10 — EXPORT IS THE END OF THE LINE.** This skill finds and qualifies. It does not send email, does not DM, does not write to a CRM, and does not log into LinkedIn. When the user asks to reach out, produce the CSV and stop.
+**LAW 10 — EXPORT IS THE END OF THE LINE.** This skill finds and qualifies. It does not send email, does not DM, does not write to a CRM, and does not log into LinkedIn. When the user asks to reach out, produce the CSV or run `contacts` and stop.
 
 **LAW 11 — THE ENGINE WRITES THE DOCUMENT.** When the user wants a report, pass `--format md,pdf --out PATH` and hand back the paths. Do not assemble a document out of the JSON yourself: your version will drop the attributed arithmetic, the corroboration counts, and the coverage caveats, and it will look authoritative while doing it. A hand-written summary of a research report is the same failure as LAW 1, one step later.
 
 **LAW 12 — "MORE" IS NOT ANOTHER `find`.** Discovery already returned more names than `--deep` paid to enrich. `more --offset N` continues down that stored ranking and `report --offset N` re-cuts it for free. Re-running `find` re-buys every search to surface mostly the same people. If the user asks for more names and you run `find` again, you have spent their credits on a duplicate.
+
+**LAW 13 — COMPOSE, DON'T IMPERSONATE, DON'T INVENT AN EMAIL.** Public emails, Calendly links, and personal sites come from the engine — they appeared on a profile. A work email you pattern-guess (`jane@acme.com`) is a bounce waiting to happen. If `contact-goat-pp-cli` is on PATH and the user asked for a work email or a warm intro, run *that* binary, and only after they agree to spend. If it is not installed, say so. Never invent an address to look helpful.
 
 ---
 
@@ -201,6 +203,7 @@ Scan your drafted response and fix any hit:
 - [ ] I led with `n_new`, not with the total.
 - [ ] No band is higher in my prose than in `fit_band`.
 - [ ] No `*******` anywhere.
+- [ ] No email I invented. Every address appears in `results` or in `contacts`.
 - [ ] My additions are three sentences or fewer.
 - [ ] If they asked what it cost, I used `meta.credits_spent` and not an estimate.
 - [ ] If they asked for a file, I gave them the path the engine printed — I did not write the report myself.
@@ -250,6 +253,7 @@ $BIN show person/youtube/handle --agent   # 0  one entity, full dossier
 $BIN list --status new --agent            # 0
 $BIN mark person/youtube/h --status outreached --agent
 $BIN export --status new --band strong --out handoff.csv --agent
+$BIN contacts --agent                     # 0  emails and links they published
 $BIN icp show --agent                     # 0  the fit rules in force
 $BIN signals --agent                      # 0  signal names you can score
 $BIN feedback "what surprised you" --agent
@@ -356,6 +360,18 @@ $BIN more --offset 10 --limit 10 --format md,pdf --out ~/Desktop/next-ten --agen
 
 ---
 
+### 9. "What's their email?"
+
+```bash
+$BIN contacts --agent
+```
+
+> **You:** Three of the ten published an address; Jane's is hello@acme.com and she books meetings on Calendly. The rest did not put an inbox on a public page — I will not invent one. [paste `table`]
+>
+> If they want a *guessed* work email and `contact-goat-pp-cli` is installed: ask before spending, then run that binary. If it is not installed, say so.
+
+---
+
 # ICP FIT
 
 Fit is a local JSON file the user owns. With no file, the engine derives a topic gate from the brief and applies generic seniority rules.
@@ -401,14 +417,26 @@ Each of these is a specific way this output goes wrong. Recognise the shape in y
 - **keyword trap** — ran the engine on a brief with no topic in it.
 - **gap deletion** — dropped the `GAPS` block so the answer reads cleaner.
 - **silent re-rank** — reordered results to match what you thought the user wanted.
+- **invented email** — wrote `jane@acme.com` because the company is Acme. Violates LAW 13.
 
 ---
+
+# COMPOSE — OTHER SKILLS, NOT A SOUP
+
+This engine stays public-data and clone-and-run. Two other tools sit next to it; you run them *as themselves* when the user asks for what they do.
+
+| they ask | you run | never |
+|---|---|---|
+| what people are *saying* about a topic | `last30days` | do not pretend a who-finder shortlist is a conversation report |
+| a work email they did not publish, a warm intro, who they already know at the company | `contact-goat-pp-cli` (if installed — `doctor` reports it) | do not invent `jane@acme.com`; do not run `waterfall` / `deepline find-email` without asking first |
+
+`contacts` on this CLI is the public half: addresses and Calendly links already on the profile. That is a finding. A guessed inbox is not.
 
 # WHEN NOT TO USE THIS SKILL
 
 - Researching a *topic* rather than people — use `last30days`.
 - Anything that writes to a remote system.
-- Contact details. This finds public profiles; it does not do email discovery.
+- Guessed work emails or warm intros — that is contact-goat, and only with consent to spend.
 - Private or logged-in data of any kind.
 
 ---
@@ -426,7 +454,8 @@ One level deep, load only what the run needs.
 | [reference/sources.md](reference/sources.md) | endpoints, credits, freshness, drift detection |
 | [reference/enrichment.md](reference/enrichment.md) | dossier fields, per-platform extraction, LinkedIn masking |
 | [reference/icp.md](reference/icp.md) | fit config schema and the scoring arithmetic |
-| [reference/insights.md](reference/insights.md) | coverage states, findings, clusters, the absence rules |
+| [reference/insights.md](reference/insights.md) | coverage states, findings, notices, clusters, the absence rules |
+| [reference/contacts.md](reference/contacts.md) | public emails and links; composing contact-goat |
 | [reference/identity.md](reference/identity.md) | how a URL becomes `kind/platform/handle` |
 | [reference/scoring.md](reference/scoring.md) | engagement vs presence, priority blending |
 | [reference/roster.md](reference/roster.md) | new vs known, statuses, the seen-list |

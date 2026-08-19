@@ -213,7 +213,7 @@ Pulls "people also viewed" profiles and listed employees out of a dossier you al
 $BIN doctor [--probe]
 ```
 
-Reports one of `ready`, `skipped-unconfigured`, `auth-failed`, `error`, plus the roster path, ICP path, and credit balance. `--probe` spends one credit on a real YouTube search and is the only command that proves the live path end to end.
+Reports one of `ready`, `skipped-unconfigured`, `auth-failed`, `error`, plus the roster path, ICP path, credit balance, and whether `contact-goat-pp-cli` is on PATH (optional — work-email lookup). `--probe` spends one credit on a real YouTube search and is the only command that proves the live path end to end.
 
 ### `agent-context` — self-description
 
@@ -239,10 +239,11 @@ $BIN new  [--query Q] [--kind K] [--limit N]
 $BIN show IDENTITY
 $BIN mark IDENTITY --status new|watched|outreached|skip|customer
 $BIN export [--status S] [--band B] [--kind K] [--limit N] [--out PATH]
+$BIN contacts [--status S] [--band B] [--kind K] [--limit N]
 $BIN import PATH.csv
 ```
 
-All zero credits. `import` before your first `find` when the user already has a skip or customer list — that is what makes "new" mean new.
+All zero credits. `import` before your first `find` when the user already has a skip or customer list — that is what makes "new" mean new. `contacts` prints emails and links already on stored profiles; it does not guess a work inbox. See [contacts.md](contacts.md).
 
 ### Config and meta
 

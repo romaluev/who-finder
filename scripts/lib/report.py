@@ -18,7 +18,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-from . import __version__, pdf, portrait
+from . import __version__, contacts, notices, pdf, portrait
 from .util import human, to_int
 
 BAND_LABEL = {
@@ -76,6 +76,12 @@ def build(
     blocks.append({"t": "h1", "text": "Summary"})
     for line in ins.get("findings") or []:
         blocks.append({"t": "bullet", "text": line})
+
+    missed = ins.get("notices") or []
+    if missed:
+        blocks.append({"t": "h2", "text": "Easy to miss"})
+        for line in missed:
+            blocks.append({"t": "bullet", "text": line})
 
     stats = _at_a_glance(rows, dossiers, n_new, n_known)
     if stats:
@@ -243,6 +249,24 @@ def _person(i: int, r: dict, dossiers: dict, hits: list[dict],
     if hook:
         fields.append(("Why reach out", hook))
 
+    c = d.get("contacts") or contacts.harvest(d)
+    reach = contacts.reach_line(c)
+    if reach:
+        fields.append(("How to reach them", reach))
+    extra_links = [
+        f"{contacts.label(l)} — {l['url']}"
+        for l in c.get("links") or []
+        if l.get("kind") not in {"linkedin"} and l.get("url") not in (reach or "")
+    ]
+    if extra_links:
+        fields.append(("Also on", " · ".join(extra_links[:6])))
+
+    missed = notices.of_one(r, d, peers=peers)
+    # Skip the email/calendly notices — those already have their own fields.
+    missed = [n for n in missed if n["kind"] not in {"email", "calendly"}]
+    if missed:
+        fields.append(("Easy to miss", " · ".join(n["text"] for n in missed)))
+
     posts = portrait.recent_lines(d)
     if posts:
         fields.append(("What they've been saying", " · ".join(posts)))
@@ -267,8 +291,8 @@ def _person(i: int, r: dict, dossiers: dict, hits: list[dict],
         fields.append(("Note", "Profile could not be fetched, so this entry rests on the "
                                "search result alone and is marked unverified."))
 
-    links = [r.get("url") or d.get("url")] + list(d.get("links") or [])
-    links = [l for l in dict.fromkeys(links) if l]
+    # Profile URL first; harvested links already appear as labelled fields.
+    links = [l for l in dict.fromkeys([r.get("url") or d.get("url")]) if l]
 
     return {
         "t": "person",

@@ -48,6 +48,14 @@ Emitted only when the underlying data exists:
 
 Grammar is generated with `plural()`; `1 entity`, not `1 entities`. Small thing, but a report that says "1 profiles" reads like nobody checked it.
 
+## Notices — easy to miss
+
+A ranking table is easy to scan and easy to misread. `notices.py` looks *across* the shortlist for things a reader would not notice on the first pass: the same person on two platforms, a hub whose similar-profiles list includes other names in the set, three people at one company, a shared personal site, a city cluster, hiring-and-funded on the same name.
+
+Every notice is a sentence with evidence. No evidence, no notice. They appear as `insights.notices` and as **Easy to miss** in the report, separate from `WHAT I FOUND` so a landscape summary and a surprise do not get blended into one paragraph a model can "improve."
+
+See [contacts.md](contacts.md) for the full catalogue.
+
 ## Clusters
 
 Themes come from shared profile vocabulary, with three guards:

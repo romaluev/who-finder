@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from . import portrait
+from . import notices, portrait
 from .util import CLUSTER_MIN_LEN, plural, to_int
 
 # Below this many enriched profiles, shared vocabulary is coincidence, not a theme.
@@ -102,6 +102,18 @@ def findings(
     return out
 
 
+def easy_to_miss(rows: list[dict], dossiers: list[dict]) -> list[str]:
+    """Notices a ranking table will not show. Empty if nothing surprising."""
+    ds = []
+    for i, d in enumerate(dossiers):
+        d = dict(d)
+        if not d.get("id") and i < len(rows):
+            r = rows[i]
+            d["id"] = r.get("id") or f"{r.get('kind')}/{r.get('platform')}/{r.get('handle')}"
+        ds.append(d)
+    return [n["text"] for n in notices.of_set(rows, ds)]
+
+
 def gaps(dossiers: list[dict], source_status: list[dict], errors: list[str]) -> list[str]:
     out = []
     dead = [s for s in (source_status or []) if s.get("state") == "error"]
@@ -163,6 +175,7 @@ def build(
             n_known=n_known,
             source_status=source_status,
         ),
+        "notices": easy_to_miss(rows, dossiers),
         "clusters": clusters(dossiers),
         "gaps": gaps(dossiers, source_status, errors),
     }

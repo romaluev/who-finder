@@ -52,6 +52,12 @@ Named so you can catch the shape in your own draft before the user does. Each en
 **Why:** a row with a blank role looks incomplete.
 **Fix:** "role not public" is a real answer. A fabricated title is indistinguishable from a real one to the reader, which is what makes it costly.
 
+### invented email
+**Symptom:** `jane@acme.com` in a report when the profile never published that address.
+**Why:** a shortlist without an inbox looks unfinished, and first.last@domain is easy to type.
+**Why it is bad:** it looks like a finding, it bounces, and the reader cannot tell which addresses were real.
+**Fix:** print only what `contacts` harvested. A missing inbox is a missing inbox. Guessed work emails are contact-goat, and only after the user agrees to spend.
+
 ### band inflation
 **Symptom:** an unenriched row described as a strong lead.
 **Why:** the search snippet reads well.

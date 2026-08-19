@@ -22,7 +22,7 @@ import pathlib
 import sys
 from pathlib import Path
 
-from . import __version__, agentio, db, emit, enrich, icp, insights, report, sources
+from . import __version__, agentio, contacts, db, emit, enrich, icp, insights, notices, report, sources
 from .agentio import E_API, E_AUTH, E_BUDGET, E_CONFIG, E_NOTFOUND, E_USAGE
 from .identity import parse_id
 from .planner import detect_scenario, plan as make_plan
@@ -69,6 +69,7 @@ SIGNALS = {
     "verified": "platform verification badge",
     "posting": "has recent public posts",
     "masked-profile": "LinkedIn hid job history; role came from the search snippet",
+    "books-meetings": "profile publishes a Calendly or cal.com link",
     "smb": "under 200 employees",
     "midmarket": "200-1999 employees",
     "enterprise": "2000+ employees",
@@ -97,6 +98,7 @@ COMMAND_HELP = {
     "show": ("one entity + dossier + hits + snapshots", "0"),
     "mark": ("new|watched|outreached|skip|customer", "0"),
     "export": ("CSV handoff (does not send)", "0"),
+    "contacts": ("public emails and links already on stored profiles", "0"),
     "import": ("seed skip/customer/outreached from CSV", "0"),
     "profile": ("save/list/show/delete a reusable flag set", "0"),
     "feedback": ("record what surprised you about this CLI", "0"),
@@ -212,6 +214,7 @@ def _score_rows(conn, rows: list[dict], dossiers: dict[str, dict], cfg: dict, ts
     for r in rows:
         ident = _ident(r)
         d = dossiers.get(ident) or enrich.shallow(r)
+        contacts.attach(d)
         f = icp.fit(d, cfg)
         pr = icp.priority(d, f, r.get("novelty") or "known", int(r.get("score") or 0))
         r["headline"] = d.get("headline")
@@ -252,6 +255,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             "icp_exists": icp_path.exists(),
             "scenarios": list(SCENARIOS),
             "sources": list(SOURCES),
+            "contact_goat": {
+                "installed": bool(contacts.contact_goat_bin()),
+                "bin": contacts.contact_goat_bin(),
+                "note": "optional. emails we print are only those published on a "
+                        "public profile. guessed work emails are contact-goat's job, "
+                        "and only if the user asked.",
+            },
         },
     }
     if not token:
@@ -1166,6 +1176,13 @@ def cmd_export(args: argparse.Namespace) -> int:
             band=args.band,
             limit=args.limit,
         )
+        for r in rows:
+            c = contacts.harvest(contacts.from_row(r))
+            r["emails"] = "; ".join(c["emails"])
+            r["website"] = next((l["url"] for l in c["links"] if l["kind"] == "website"), "")
+            r["calendly"] = next(
+                (l["url"] for l in c["links"] if l["kind"] in {"calendly", "calendar"}), ""
+            )
         text = db.export_csv(rows)
     finally:
         conn.close()
@@ -1185,6 +1202,55 @@ def cmd_export(args: argparse.Namespace) -> int:
         )
     sys.stdout.write(text)
     return 0
+
+
+def cmd_contacts(args: argparse.Namespace) -> int:
+    """Public addresses already on stored profiles. Zero credits, no guessing."""
+    conn = _db(args)
+    try:
+        rows = db.list_ranked(
+            conn,
+            status=args.status,
+            query=args.query,
+            kind=args.kind,
+            band=args.band,
+            limit=args.limit,
+        )
+    finally:
+        conn.close()
+    people = []
+    for r in rows:
+        d = contacts.from_row(r)
+        c = contacts.harvest(d)
+        people.append({
+            "id": _ident(r),
+            "name": r.get("name") or d.get("name"),
+            "emails": c["emails"],
+            "links": c["links"],
+            "reach": contacts.reach_line(c),
+            "takes_meetings": c["takes_meetings"],
+            "company": notices.employer(r, d),
+        })
+    goat = contacts.contact_goat_bin()
+    handoff = []
+    if goat and people:
+        top = people[0]
+        handoff = contacts.handoff_lines(top.get("name") or "", top.get("company") or "")
+    payload = {
+        "meta": {"source": "who-finder", "version": __version__, "credits_spent": 0},
+        "table": emit.contacts_card(people, goat=goat),
+        "results": {
+            "n": len(people),
+            "n_with_email": sum(1 for p in people if p["emails"]),
+            "n_book_meetings": sum(1 for p in people if p["takes_meetings"]),
+            "people": people,
+            "contact_goat": {"installed": bool(goat), "bin": goat, "handoff": handoff},
+            "note": "only addresses and URLs published on a public profile. "
+                    "do not invent jane@acme.com. if the user wants a work email "
+                    "or a warm intro and contact-goat is installed, ask before spending.",
+        },
+    }
+    return _emit(payload, args.agent, args)
 
 
 def cmd_import(args: argparse.Namespace) -> int:
@@ -1470,6 +1536,15 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--limit", type=int, default=200)
     e.add_argument("--out", default=None)
     e.set_defaults(fn=cmd_export)
+
+    ct = sub.add_parser("contacts", parents=[shared],
+                        help="public emails and links already on stored profiles")
+    ct.add_argument("--status", default="new")
+    ct.add_argument("--query", default=None)
+    ct.add_argument("--kind", default=None, choices=["person", "company"])
+    ct.add_argument("--band", default=None, choices=list(icp.BANDS))
+    ct.add_argument("--limit", type=int, default=25)
+    ct.set_defaults(fn=cmd_contacts)
 
     i = sub.add_parser("import", parents=[shared], help="seed skip/customer/outreached from CSV")
     i.add_argument("csv")

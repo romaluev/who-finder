@@ -143,6 +143,9 @@ HANDOFF_FIELDS = (
     "last_seen",
     "sample_title",
     "sample_url",
+    "emails",
+    "website",
+    "calendly",
     "notes",
 )
 

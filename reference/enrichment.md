@@ -8,7 +8,7 @@ Triggered by `find --deep N`, `enrich`, or implicitly by `expand` when no dossie
 
 | identity | endpoint | credits | gives |
 |---|---|---|---|
-| `person/linkedin/*` | `/v1/linkedin/profile?url=` | 1 | name, location, followers, about, recent posts, similar profiles |
+| `person/linkedin/*` | `/v1/linkedin/profile?url=` | 1 | name, location, followers, about, website/socials when present, recent posts, similar profiles |
 | `company/linkedin/*` | `/v1/linkedin/company?url=` | 1 | industry, size, employees, founded, HQ, specialties, funding, investors, staff with titles, posts, similar pages |
 | `*/youtube/*` | `/v1/youtube/channel?handle=` | 1, or 0 cached | subscribers, video count, total views, description, country, external links |
 | `*/tiktok/*` | `/v1/tiktok/profile?handle=` | 1, or 0 cached | followers, likes, video count, bio, verified, bio link |
@@ -39,6 +39,7 @@ That merge is the whole reason this tool combines sources rather than picking on
 | `recent` | recent post titles with links — what they are talking about now |
 | `topics` | keywords extracted from bio + headline + snippet + posts |
 | `links` | cross-platform links found on the profile (a free identity graph) |
+| `contacts` | harvested public emails, labelled links, whether they book meetings — never guessed |
 | `similar` | LinkedIn `similarProfiles` / `similarPages` — feeds `expand` |
 | `people` | LinkedIn company `employees[]`, **with real job titles** |
 | `signals` | derived tags (`who-finder signals`) |

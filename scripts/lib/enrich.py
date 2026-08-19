@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import http
+from . import contacts, http
 from .util import clean, human, keywords, to_int, to_str
 
 SC = "https://api.scrapecreators.com"
@@ -206,6 +206,7 @@ def enrich(
         limit=10,
     )
     d["signals"] = sorted(set(d["signals"]) | _derive_signals(d))
+    contacts.attach(d)
     return d
 
 
@@ -219,6 +220,47 @@ def _headline_from_snippet(snippet: str, name: str) -> str:
     if name and s.lower().startswith(name.lower()):
         s = s[len(name) :].lstrip(" -–—|·,")
     return s[:180].strip()
+
+
+def _pull_urls(raw: Any, depth: int = 0) -> list[str]:
+    """Walk the keys a profile API actually uses for websites and socials.
+
+    One level of nesting (creator, contactInfo) is enough. Deeper walking
+    picks up schema.org junk and avatar CDNs.
+    """
+    if not isinstance(raw, dict) or depth > 1:
+        return []
+    out: list[str] = []
+    for key in (
+        "website", "websiteUrl", "website_url", "email", "twitter", "instagram",
+        "youtube", "github", "calendly", "url", "link", "href",
+    ):
+        val = raw.get(key)
+        if isinstance(val, str) and val.strip():
+            out.append(val.strip())
+        elif isinstance(val, dict):
+            out.extend(_pull_urls(val, depth + 1))
+    for key in ("websites", "links", "socials", "socialLinks", "social_links"):
+        for item in raw.get(key) or []:
+            if isinstance(item, str) and item.strip():
+                out.append(item.strip())
+            elif isinstance(item, dict):
+                for k in ("url", "link", "href"):
+                    if clean(item.get(k)):
+                        out.append(clean(item.get(k)))
+    if depth == 0:
+        for nest in ("creator", "contactInfo", "contact_info"):
+            sub = raw.get(nest)
+            if isinstance(sub, dict):
+                out.extend(_pull_urls(sub, 1))
+    return out
+
+
+def _add_links(d: dict, urls: list[str]) -> None:
+    for url in urls:
+        url = clean(url)
+        if url and url not in d["links"]:
+            d["links"].append(url)
 
 
 def _linkedin_person(d: dict, raw: dict) -> None:
@@ -247,9 +289,23 @@ def _linkedin_person(d: dict, raw: dict) -> None:
             d["company"]["url"] = clean(exp[0].get("url"))
         else:
             d["masked"] = True
+    # Some payloads still ship a real headline even when experience is starred.
+    hl = clean(raw.get("headline"))
+    if hl and (not d["headline"] or d["headline_source"] in {"linkedin-about", "linkedin-experience"}):
+        d["headline"] = hl[:180]
+        d["headline_source"] = "linkedin-headline"
     if not d["headline"] and d["bio"]:
         d["headline"] = d["bio"].split(".")[0][:180]
         d["headline_source"] = "linkedin-about"
+
+    cc = raw.get("currentCompany") or raw.get("company")
+    if isinstance(cc, dict) and clean(cc.get("name")):
+        d["company"]["current"] = d["company"].get("current") or clean(cc.get("name"))
+        d["company"]["url"] = d["company"].get("url") or clean(cc.get("url") or cc.get("link"))
+    elif isinstance(cc, str) and cc.strip() and not d["company"].get("current"):
+        d["company"]["current"] = clean(cc)
+
+    _add_links(d, _pull_urls(raw))
 
     posts = raw.get("recentPosts") if isinstance(raw.get("recentPosts"), list) else []
     acts = raw.get("activity") if isinstance(raw.get("activity"), list) else []
@@ -303,6 +359,7 @@ def _linkedin_company(d: dict, raw: dict) -> None:
     d["headline_source"] = "linkedin-company"
     if d["company"]["website"]:
         d["links"].append(d["company"]["website"])
+    _add_links(d, _pull_urls(raw))
 
     for p in (raw.get("posts") or [])[:6]:
         if isinstance(p, dict):
@@ -404,6 +461,15 @@ def _twitter(d: dict, raw: dict) -> None:
         "posts": to_int(legacy.get("statuses_count")),
     }
     d["location"] = clean(legacy.get("location"))
+    ents = legacy.get("entities") if isinstance(legacy.get("entities"), dict) else {}
+    for bucket in (ents.get("url"), ents.get("description")):
+        if not isinstance(bucket, dict):
+            continue
+        for u in bucket.get("urls") or []:
+            if isinstance(u, dict):
+                _add_links(d, [u.get("expanded_url") or u.get("url") or ""])
+    _add_links(d, _pull_urls(legacy))
+    _add_links(d, _pull_urls(user if isinstance(user, dict) else {}))
 
 
 def _derive_signals(d: dict) -> set[str]:
@@ -420,6 +486,9 @@ def _derive_signals(d: dict) -> set[str]:
         sig.add("posting")
     if d.get("masked"):
         sig.add("masked-profile")
+    links = " ".join(str(x) for x in (d.get("links") or []))
+    if "calendly.com" in links or "cal.com/" in links:
+        sig.add("books-meetings")
     co = d.get("company") or {}
     if to_int(co.get("funding_rounds")):
         sig.add("funded")

@@ -10,6 +10,13 @@ def test_which_hiring():
     assert "find" in hit["run"]
 
 
+def test_which_email_maps_to_contacts_not_a_guess():
+    hit = resolve("what's their email")
+    assert hit["matched"] is True
+    assert hit["run"].startswith("contacts")
+    assert "guess" in (hit.get("note") or "")
+
+
 def test_which_unknown_falls_back_to_find():
     hit = resolve("something totally novel")
     assert "find" in hit["run"]
@@ -60,6 +67,14 @@ def test_cli_which_and_scenarios(capsys):
     out = capsys.readouterr().out
     assert "hiring" in out
     assert "creators" in out
+
+
+def test_cli_contacts_on_an_empty_roster_does_not_invent_anyone(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("WHO_FINDER_HOME", str(tmp_path))
+    monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
+    assert main(["contacts", "--agent"]) == 0
+    out = capsys.readouterr().out
+    assert "PUBLIC CONTACTS" in out or "\"n\": 0" in out
 
 
 def test_cli_doctor_missing_key(monkeypatch, tmp_path, capsys):

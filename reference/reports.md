@@ -37,9 +37,9 @@ If you want the prettier document, generate `html` and print it from a browser. 
 
 **Cover.** The brief, which slice of the ranking this covers, the fit rules in force, how many names were new, and what it cost.
 
-**Summary.** The findings the engine synthesised, an at-a-glance block (fit spread, audience median and maximum, which platforms they came from, how many profiles were actually fetched), the ranked table, recurring themes, and what the report does *not* cover.
+**Summary.** The findings the engine synthesised, then **Easy to miss** (the cross-set notices a ranking table hides), an at-a-glance block, the ranked table, recurring themes, and what the report does *not* cover.
 
-**The people.** One entry each, in priority order: role and where it came from, audience, location, bio, the arithmetic behind the fit score, what is missing from it, signals, topics, latest activity, corroboration, links, and the queries that surfaced them.
+**The people.** One entry each, in priority order: who they are, why they fit, why reach out, how to reach them (only addresses they published), what they have been saying, company and colleagues, similar profiles, and — when the data supports it — an **Easy to miss** line (same person on another platform, creator-shaped audience, a Calendly, a masked title).
 
 **How this was researched.** Every framing used and why, every query run, per-source coverage, and how to read the fit score. This section is why the report can be forwarded to someone who was not there: it says what was asked and what was not, so nobody mistakes a gap in coverage for a finding.
 

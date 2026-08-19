@@ -202,7 +202,8 @@ def test_export_carries_the_research_into_csv(wired, capsys, tmp_path):
     assert cli.main(["export", "--status", "new", "--out", str(out), "--agent"]) == 0
     text = out.read_text(encoding="utf-8")
     header = text.splitlines()[0]
-    for col in ("headline", "audience", "fit_score", "fit_band", "priority", "signals"):
+    for col in ("headline", "audience", "fit_score", "fit_band", "priority", "signals",
+                "emails", "website", "calendly"):
         assert col in header
     assert "person/linkedin/jane-doe" in text
     assert "strong" in text

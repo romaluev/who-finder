@@ -136,9 +136,22 @@ INDEX = (
         "scenario": "people",
     },
     {
+        "needles": ("email", "e-mail", "work email", "contact details", "how to reach",
+                    "how do i reach", "calendly", "phone number", "their email"),
+        "run": "contacts --agent",
+        "note": "public addresses and links already on the profiles. does not guess jane@acme.com",
+    },
+    {
+        "needles": ("warm intro", "who do i know", "mutual connection", "happenstance",
+                    "deepline", "find their email"),
+        "run": "contacts --agent",
+        "note": "who-finder prints what they published. guessed work emails and warm intros "
+                "are contact-goat-pp-cli, and only after the user agrees to spend",
+    },
+    {
         "needles": ("export", "csv", "sheet", "handoff"),
         "run": "export --status new --out who-handoff.csv --agent",
-        "note": "carries headline, audience, fit_score, fit_band, priority, signals",
+        "note": "carries headline, audience, fit_score, fit_band, priority, signals, emails",
     },
     {
         "needles": ("show", "this person", "this company", "detail"),

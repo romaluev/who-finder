@@ -25,7 +25,7 @@ Without `--out` or `--deliver`, the CSV goes to stdout.
 ```
 kind,platform,handle,id,name,url,status,novelty,score,previous_score,
 hit_count,views,likes,comments,shares,last_query,last_scenario,
-first_seen,last_seen,sample_title,sample_url,notes
+first_seen,last_seen,sample_title,sample_url,emails,website,calendly,notes
 ```
 
 | group | columns | note |
@@ -36,6 +36,7 @@ first_seen,last_seen,sample_title,sample_url,notes
 | engagement | `views,likes,comments,shares` | **empty on every LinkedIn and web row** |
 | provenance | `last_query,last_scenario,first_seen,last_seen` | how and when we found them |
 | evidence | `sample_title,sample_url` | the best single hit, so a reviewer can sanity-check the row |
+| public contact | `emails,website,calendly` | only what they published; empty is honest |
 | free text | `notes` | yours |
 
 The empty engagement columns on LinkedIn rows are honest rather than broken: those rows come from a Google index that reports no interaction data. A reviewer sorting the sheet by `views` will see all LinkedIn rows sink, which is a property of the source, not a ranking.

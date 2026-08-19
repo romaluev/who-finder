@@ -13,6 +13,8 @@ Not a list of links. A finished report — a summary of what it found, then a pa
 > **1. Jane Doe** — Head of Content at Acme
 > **STRONG FIT** · 24k followers · Austin
 > Leads a team making AI video ads for consumer brands. Hiring a senior video producer right now.
+> *How to reach her:* hello@acme.com · calendly.com/jane — she published both.
+> *Easy to miss:* same person as the YouTube channel in this set; creator-shaped LinkedIn (24k followers, 500 connections).
 > *Why she's here:* matches your topic, runs a team, audience in your target range, and three different phrasings of the search all surfaced her.
 
 Everyone is ranked. Every score shows its working. Anyone the tool couldn't fully verify is marked as such rather than dressed up.
@@ -35,7 +37,7 @@ If you're setting it up for the first time, the [setup guide](SHARE.md) walks th
 
 1. **It understands the request.** "People", "companies", "creators", "who's hiring", "journalists", "X vs Y" are different kinds of search, and it plans accordingly.
 2. **It asks the question several ways.** One phrasing only finds the people who describe themselves that way, so it reframes your topic — and you can add the field's own vocabulary — to reach the people a literal search misses.
-3. **It reads public profiles.** Role, audience size, location, what they've posted recently. Nothing private, nothing behind a login.
+3. **It reads public profiles.** Role, audience size, location, what they've posted recently, and any email or Calendly they published themselves. Nothing private, nothing behind a login, and it never invents an inbox.
 4. **It scores each one against *your* definition of a good fit**, with the arithmetic shown — not a model's opinion.
 5. **It ranks and remembers.** Best first, and it never shows you the same name twice.
 6. **It writes it up** as Markdown, a styled web page, or a PDF.
@@ -125,6 +127,7 @@ $B expand company/linkedin/acme                    # its staff + lookalikes, 0 c
 $B show person/youtube/adlab                       # full dossier card
 $B mark person/linkedin/jane-doe --status outreached
 $B export --status new --band strong --out handoff.csv
+$B contacts                                        # emails and links they published
 $B import known-customers.csv                      # seed a skip list
 ```
 
@@ -137,7 +140,7 @@ Add `--agent` to any command for a single JSON envelope. `--dry-run` previews co
 ### Tests
 
 ```bash
-python3 -m pytest tests -q      # 166 tests, no network, no key required
+python3 -m pytest tests -q      # 190 tests, no network, no key required
 ```
 
 ## License

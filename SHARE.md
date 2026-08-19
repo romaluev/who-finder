@@ -13,7 +13,7 @@ You don't run this yourself. Once it's set up with your AI assistant, you just a
 > *"Journalists covering generative video."*
 > *"Show me ten more."*
 
-You get back a document: a summary of what it found, then a page on each person — who they are, how big their audience is, and why they're worth your time, with the reasoning shown. It never shows you the same name twice, and it never invents a name or a number.
+You get back a document: a summary of what it found, then a page on each person — who they are, how to reach them (only addresses they published), what you'd miss on a first scan, and why they're worth your time. It never shows you the same name twice, and it never invents a name, a number, or an email.
 
 ## Setting it up (a few minutes, no programming)
 
