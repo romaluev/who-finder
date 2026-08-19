@@ -275,3 +275,69 @@ def test_feedback_takes_a_bare_note(home, capsys):
 def test_unknown_profile_is_not_found(home, capsys):
     code = cli.main(["--profile", "ghost", "list", "--agent"])
     assert code == agentio.E_NOTFOUND
+
+
+# --------------------------------------------------------------------------
+# First run
+#
+# A cold start is the only moment a new user decides whether this is usable.
+# argparse's default answer to every one of these is a list of nineteen
+# subcommands and "invalid choice", which names the mistake but not the fix.
+# --------------------------------------------------------------------------
+
+
+def test_no_arguments_teaches_instead_of_erroring(home, capsys):
+    assert cli.main([]) == 0
+    out = capsys.readouterr().out
+    assert "TRY THIS FIRST" in out
+    assert "--dry-run" in out, "the free, keyless path must be the first thing offered"
+    assert "scrapecreators.com" in out, "they cannot start without knowing where the key comes from"
+
+
+def test_help_words_reach_the_same_place(home, capsys):
+    for word in ("help", "start", "setup", "?"):
+        assert cli.main([word]) == 0
+        assert "TRY THIS FIRST" in capsys.readouterr().out
+
+
+def test_a_typed_brief_is_redirected_to_find(home, capsys):
+    """Someone who types what they want, rather than a subcommand, is close to
+    right — say so and show the exact command."""
+    code = cli.main(["find me AI video founders"])
+    out = capsys.readouterr().out
+    assert code == agentio.E_USAGE
+    assert 'find "find me AI video founders"' in out
+    assert "--dry-run" in out
+
+
+def test_a_mistyped_command_points_at_which(home, capsys):
+    code = cli.main(["serch"])
+    out = capsys.readouterr().out
+    assert code == agentio.E_USAGE
+    assert 'which "serch"' in out
+
+
+def test_doctor_prints_a_readable_card_for_humans(home, capsys, monkeypatch):
+    monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
+    code = cli.main(["doctor"])
+    out = capsys.readouterr().out
+    assert code == agentio.E_AUTH
+    assert "NOT SET UP" in out
+    assert "export SCRAPECREATORS_API_KEY" in out
+    assert not out.lstrip().startswith("{"), "humans should not be shown raw JSON"
+
+
+def test_doctor_still_gives_agents_structured_results(home, capsys, monkeypatch):
+    monkeypatch.delenv("SCRAPECREATORS_API_KEY", raising=False)
+    cli.main(["doctor", "--agent"])
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["results"]["state"] == "skipped-unconfigured"
+    assert payload["table"], "the human card rides along as `table`"
+
+
+def test_bare_agent_invocation_returns_the_context_map(home, capsys):
+    """An agent that runs this with no command should get something machine
+    readable, not a welcome poster."""
+    assert cli.main(["--agent"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["results"]["primary_verb"] == "find"

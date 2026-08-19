@@ -15,6 +15,111 @@ from .util import human, to_int
 BAND_MARK = {"strong": "STRONG", "possible": "MAYBE ", "weak": "weak  ", "off": "off   ", "unknown": "?     "}
 
 
+def welcome(*, invocation: str, python: str, key_set: bool, db_path: str, db_exists: bool) -> str:
+    """First contact. Shown for no arguments, `help`, and unrecognised commands.
+
+    The default argparse error lists nineteen subcommands and says a required
+    argument is missing, which tells someone who has never used this what they
+    typed wrong but not what to type instead. This answers the second question.
+    """
+    key_line = (
+        "  [x] API key      set"
+        if key_set else
+        "  [ ] API key      not set — needed only for real searches\n"
+        "                   export SCRAPECREATORS_API_KEY=your-key\n"
+        "                   get one at https://scrapecreators.com"
+    )
+    roster = "already here" if db_exists else "created on your first search"
+    return "\n".join([
+        f"who-finder v{__version__} — find people and companies from public profiles",
+        "",
+        "Describe who you are looking for in plain English. It works out what kind of",
+        "search that is, runs it, and tells you who is worth contacting and why.",
+        "",
+        "SETUP",
+        f"  [x] Python       {python}",
+        key_line,
+        f"  [ ] roster       {roster}",
+        f"                   {db_path}",
+        "",
+        "TRY THIS FIRST — free, no key needed, spends nothing",
+        f'  {invocation} find "founders of AI video tools" --deep 10 --dry-run',
+        "",
+        "  That prints the exact searches it would run and what they would cost,",
+        "  without running them. It is the safe way to see how this behaves.",
+        "",
+        "ONCE YOUR KEY IS SET",
+        f"  {invocation} doctor",
+        "      check the key works and see your credit balance",
+        f'  {invocation} find "founders of AI video tools" --deep 10',
+        "      the real thing — names, roles, audience size, and fit",
+        f"  {invocation} report",
+        "      show the last results again, free",
+        f"  {invocation} export --out shortlist.csv",
+        "      hand the shortlist to a human or a CRM",
+        "",
+        "OTHER THINGS TO ASK",
+        f'  {invocation} which "how much will this cost"',
+        "      describe what you want in your own words and it names the command",
+        f"  {invocation} --help",
+        "      the full flag list",
+        "",
+        "It never sends email, never logs into LinkedIn, and never writes to a CRM.",
+    ])
+
+
+def doctor_card(r: dict) -> str:
+    """Human-readable health. The JSON form is for agents; this is for people."""
+    state = r.get("state", "unknown")
+    headline = {
+        "ready": "READY — everything works",
+        "skipped-unconfigured": "NOT SET UP — no API key yet",
+        "auth-failed": "KEY REJECTED — the API did not accept this key",
+        "error": "PROBLEM — see below",
+    }.get(state, state)
+    lines = [f"who-finder v{__version__}  ·  {headline}", ""]
+
+    if r.get("key") == "missing":
+        lines += [
+            "  API key    missing",
+            "             export SCRAPECREATORS_API_KEY=your-key",
+            "             get one at https://scrapecreators.com",
+        ]
+    else:
+        lines.append("  API key    present")
+    if r.get("credits") is not None:
+        lines.append(f"  credits    {r['credits']} left")
+    if r.get("credits_error"):
+        lines.append(f"  credits    could not read — {r['credits_error']}")
+
+    lines += [
+        f"  roster     {r.get('db')}" + ("" if r.get("db_exists") else "   (not created yet)"),
+        f"  fit rules  " + (str(r.get("icp")) if r.get("icp_exists") else "built-in generic rules"),
+    ]
+    probe = r.get("probe")
+    if probe:
+        lines.append(
+            f"  live test  {probe.get('youtube_hits')} results from YouTube — the whole path works"
+            if probe.get("ok") else f"  live test  FAILED — {probe.get('error')}"
+        )
+
+    lines.append("")
+    if state == "ready":
+        lines += [
+            "Next:",
+            '  find "founders of AI video tools" --deep 10 --dry-run   preview, free',
+            '  find "founders of AI video tools" --deep 10             run it',
+        ]
+    elif state == "skipped-unconfigured":
+        lines += [
+            "You can still preview searches without a key:",
+            '  find "founders of AI video tools" --deep 10 --dry-run',
+        ]
+    else:
+        lines.append(f"Fix: {r.get('fix') or 'check the key and try again'}")
+    return "\n".join(lines)
+
+
 def plan_card(plan, est: dict, *, depth: int, icp_name: str) -> str:
     """What `--dry-run` shows: the exact queries and the ceiling on cost.
 

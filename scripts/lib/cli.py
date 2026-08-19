@@ -237,6 +237,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     icp_path = icp.config_path(getattr(args, "icp", None))
     payload = {
         "meta": {"source": "who-finder", "version": __version__},
+        # `table` is what a human sees; agents read `results`. Rendered at the
+        # end of the command so it reflects the probe and credit results.
         "results": {
             "state": "skipped-unconfigured" if not token else "ready",
             "key": "set" if token else "missing",
@@ -254,6 +256,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             f"export {ENV_KEY}=...  (recipient's own key from https://scrapecreators.com)"
         )
         payload["results"]["api"] = "untested"
+        payload["table"] = emit.doctor_card(payload["results"])
         _emit(payload, args.agent, args)
         return E_AUTH
     try:
@@ -269,12 +272,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["results"]["credits_error"] = str(exc)
         payload["results"]["api"] = "auth-failed" if exc.status in {401, 403} else "error"
         payload["results"]["state"] = payload["results"]["api"]
+        payload["table"] = emit.doctor_card(payload["results"])
         _emit(payload, args.agent, args)
         return E_API
     except Exception as exc:
         payload["results"]["credits_error"] = str(exc)
         payload["results"]["api"] = "error"
         payload["results"]["state"] = "error"
+        payload["table"] = emit.doctor_card(payload["results"])
         _emit(payload, args.agent, args)
         return E_API
     if getattr(args, "probe", False):
@@ -284,23 +289,37 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         except Exception as exc:
             payload["results"]["probe"] = {"ok": False, "error": str(exc)}
             payload["results"]["state"] = "error"
+            payload["table"] = emit.doctor_card(payload["results"])
             _emit(payload, args.agent, args)
             return E_API
+    payload["table"] = emit.doctor_card(payload["results"])
     return _emit(payload, args.agent, args)
 
 
 def cmd_which(args: argparse.Namespace) -> int:
     hit = which_resolve(args.capability)
+    lines = []
+    if hit.get("matched"):
+        lines.append("Run this:")
+    else:
+        lines.append(f"No confident match for \"{args.capability}\". Closest thing:")
+    lines.append(f"  {_invocation()} {hit['run']}")
+    if hit.get("note"):
+        lines.append(f"\n  {hit['note']}")
+    if not hit.get("matched"):
+        lines.append(f"\nOr see everything:  {_invocation()} help")
     payload = {
         "meta": {"source": "who-finder", "version": __version__},
+        "table": "\n".join(lines),
         "results": {
             "capability": args.capability,
+            "matched": bool(hit.get("matched")),
             "run": hit["run"],
             "scenario": hit.get("scenario"),
             "note": hit.get("note") or "",
         },
     }
-    _emit(payload, True)
+    _emit(payload, args.agent, args)
     return 0 if hit.get("matched") else 2
 
 
@@ -987,6 +1006,71 @@ def cmd_scenarios(args: argparse.Namespace) -> int:
 
 GLOBAL_FLAGS = ("agent", "db", "select", "deliver", "profile")
 
+HELP_WORDS = {"help", "start", "setup", "hello", "hi", "?", "-h", "--help", "usage", "guide"}
+
+
+VALUE_FLAGS = {"--db", "--select", "--deliver", "--profile", "--icp"}
+
+
+def _invocation() -> str:
+    """How the caller actually reached us, so printed examples are copy-pasteable."""
+    script = sys.argv[0] if sys.argv else ""
+    if "who_finder" not in script:  # imported, or run under a test harness
+        return "who-finder"
+    return f"python3 {script}"
+
+
+def _first_word(raw: list[str]) -> str:
+    """First bare word, skipping flags and the values they consume.
+
+    Without the skip, `--profile ghost list` reads 'ghost' as the command.
+    """
+    skip = False
+    for tok in raw:
+        if skip:
+            skip = False
+            continue
+        if tok.startswith("-"):
+            if tok in VALUE_FLAGS:
+                skip = True
+            continue
+        return tok
+    return ""
+
+
+def _welcome(agent: bool = False) -> int:
+    if agent:
+        return cmd_agent_context(argparse.Namespace(
+            agent=True, select=None, deliver=None, db=None, icp=None
+        ))
+    print(emit.welcome(
+        invocation=_invocation(),
+        python=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        key_set=bool(_token()),
+        db_path=str(db.default_db()),
+        db_exists=db.default_db().exists(),
+    ))
+    return 0
+
+
+def _did_you_mean(token: str) -> int:
+    """An unrecognised first word is usually a brief someone typed directly.
+
+    argparse's answer is a list of nineteen subcommands and a note that the
+    choice was invalid, which does not tell a first-time user that the thing
+    they typed is nearly right.
+    """
+    if " " in token or len(token.split()) > 1:
+        print(f'"{token}" looks like what you are searching for, not a command.\n')
+        print("Try:")
+        print(f'  {_invocation()} find "{token}" --deep 10 --dry-run')
+        print("\n(--dry-run previews the searches and their cost without spending anything.)")
+        return E_USAGE
+    print(f"'{token}' is not a command.\n")
+    print(f'Ask in your own words:  {_invocation()} which "{token}"')
+    print(f"Or see everything:      {_invocation()} help")
+    return E_USAGE
+
 
 def _restore_leading_globals(args: argparse.Namespace, argv: list[str], commands: set[str]) -> None:
     """Let global flags work before the subcommand as well as after it.
@@ -1036,7 +1120,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = argparse.ArgumentParser(prog="who-finder", description=__doc__, parents=[shared])
     p.add_argument("--version", action="version", version=f"who-finder {__version__}")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    # Not required: a bare invocation should teach, not raise.
+    sub = p.add_subparsers(dest="cmd", required=False)
 
     ac = sub.add_parser("agent-context", parents=[shared],
                         help="machine-readable description of this whole CLI")
@@ -1156,8 +1241,21 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("csv")
     i.set_defaults(fn=cmd_import)
 
+    raw = list(argv if argv is not None else sys.argv[1:])
+
+    # Intercept before argparse: an unknown first word is a teaching moment,
+    # not a parse error. Only when no real subcommand appears anywhere.
+    if not any(tok in sub.choices for tok in raw):
+        first = _first_word(raw)
+        if not first or first.lower() in HELP_WORDS:
+            return _welcome(agent="--agent" in raw)
+        if "--version" not in raw and "-h" not in raw and "--help" not in raw:
+            return _did_you_mean(first)
+
     args = p.parse_args(argv)
-    _restore_leading_globals(args, argv if argv is not None else sys.argv[1:], set(sub.choices))
+    if not getattr(args, "cmd", None):
+        return _welcome(agent=getattr(args, "agent", False))
+    _restore_leading_globals(args, raw, set(sub.choices))
     if getattr(args, "profile", None):
         try:
             applied = agentio.apply_profile(args, args.profile)
