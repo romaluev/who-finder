@@ -20,7 +20,7 @@ What you never do: search for names yourself, write HTTP, invent a ranking, judg
 
 ---
 
-# OUTPUT CONTRACT — THE TEN LAWS
+# OUTPUT CONTRACT — THE TWELVE LAWS
 
 These dominate every other instruction in this file. If you are about to violate one, stop and regenerate.
 
@@ -52,6 +52,10 @@ Writing "there is nobody doing this" off an `unparsed` or `error` state is the m
 **LAW 9 — NEVER PRINT A MASK.** LinkedIn hides job history on public profiles and returns asterisk strings like `*******`. The engine detects this, falls back to the search snippet, and tags the row `masked-profile`. If you ever see a run of asterisks in your drafted output, delete it — do not present it as a redacted title.
 
 **LAW 10 — EXPORT IS THE END OF THE LINE.** This skill finds and qualifies. It does not send email, does not DM, does not write to a CRM, and does not log into LinkedIn. When the user asks to reach out, produce the CSV and stop.
+
+**LAW 11 — THE ENGINE WRITES THE DOCUMENT.** When the user wants a report, pass `--format md,pdf --out PATH` and hand back the paths. Do not assemble a document out of the JSON yourself: your version will drop the attributed arithmetic, the corroboration counts, and the coverage caveats, and it will look authoritative while doing it. A hand-written summary of a research report is the same failure as LAW 1, one step later.
+
+**LAW 12 — "MORE" IS NOT ANOTHER `find`.** Discovery already returned more names than `--deep` paid to enrich. `more --offset N` continues down that stored ranking and `report --offset N` re-cuts it for free. Re-running `find` re-buys every search to surface mostly the same people. If the user asks for more names and you run `find` again, you have spent their credits on a duplicate.
 
 ---
 
@@ -106,6 +110,24 @@ Do not ask clarifying questions you can answer from the brief. The engine detect
 ```bash
 $BIN find "founders of AI video tools" --deep 10 --agent
 ```
+
+## Supply the framings only you can supply
+
+The engine reframes the topic structurally on its own: exactly as asked, as a quoted phrase, and with the leading qualifier dropped. Those rewrites work on any subject because they do not need to know what the words mean.
+
+**What the engine cannot derive is the vocabulary of the field**, and that is the reframing that finds the people a literal search misses. Somebody building `text-to-video` tools may describe themselves as working on `generative video`, `synthetic media`, or `AI film production`, and none of those strings contain the words the user typed. You know that. The engine does not, and a built-in synonym list would be wrong for every domain but one.
+
+**So pass `--frame` for any topic with real jargon behind it.** Two or three, each a phrase a practitioner would actually put in their own headline:
+
+```bash
+$BIN find "people building text-to-video tools" --deep 10 --agent \
+  --frame "generative video" \
+  --frame "AI film production"
+```
+
+Rules for a good frame. **A frame is a different vocabulary, not a different filter** — `--frame "founders of generative video"` is wasted, because role targeting is already an angle; `--frame "generative video"` is the useful half. **Never frame with a term you are not confident is real** in the field, since a frame that matches nothing costs a credit and returns noise. **Do not paraphrase the brief back into itself** — `--frame "people making AI videos"` on a brief about AI video adds nothing the literal frame did not already cover.
+
+Each extra frame is exactly one more search, so three frames on a five-angle scenario costs seven credits rather than five. `--frames N` caps the total; `--frames 1` disables reframing.
 
 ## The keyword trap
 
@@ -181,6 +203,31 @@ Scan your drafted response and fix any hit:
 - [ ] No `*******` anywhere.
 - [ ] My additions are three sentences or fewer.
 - [ ] If they asked what it cost, I used `meta.credits_spent` and not an estimate.
+- [ ] If they asked for a file, I gave them the path the engine printed — I did not write the report myself.
+
+---
+
+# STEP 5 — WHEN THEY WANT A DOCUMENT
+
+"Send me a report", "write this up", "top 10 with full detail", "something I can forward" — these all mean a file, and **the engine writes it**. Add `--format` to the same run:
+
+```bash
+$BIN find "BRIEF" --deep 10 --format md,pdf --out ~/Desktop/shortlist --agent
+```
+
+That produces `shortlist.md` and `shortlist.pdf` from one build: a cover, a summary of the landscape, a ranked table, a full page on each person, and a method section listing every query that ran. `--format` accepts `md`, `html`, `pdf`, `json`, comma-separated. **`html` is the best-looking of the four** and prints to a better PDF than the built-in writer, so offer it when the document is going to a client. The built-in `pdf` needs no browser and no install, which is why it exists.
+
+**Do not compose the document yourself.** Reformatting the JSON into your own markdown loses the attributed arithmetic, the corroboration counts, and the coverage caveats — every part that makes the file worth more than a list of names. Report the paths back and quote at most a line or two.
+
+## "Show me more"
+
+The roster holds every name discovery returned, while `--deep N` only paid to enrich the top N. So "give me another ten" is **not** a reason to run `find` again:
+
+```bash
+$BIN more --offset 10 --limit 10 --format md --out more --agent
+```
+
+`more` walks further down the existing ranking and enriches only what has not been enriched, at one credit each and zero for discovery. To re-cut a slice you have already paid for, `report --limit 10 --offset 10` costs nothing at all. **Re-running `find` to get more names is the single most expensive mistake available in this tool** — it re-buys every search and returns mostly the same people, now marked `known`.
 
 ---
 
@@ -192,7 +239,11 @@ $BIN agent-context --agent                # 0  machine-readable map of this whol
 $BIN which "who should we pitch" --agent  # 0  capability phrase -> command
 $BIN find "BRIEF" --deep 10 --agent       # the primary verb
 $BIN find "BRIEF" --dry-run --agent       # 0  exact queries + cost ceiling
+$BIN find "BRIEF" --frame "other words"   # +1 per frame; add the field's vocabulary
+$BIN find "BRIEF" --format md,pdf --out PATH --agent   # write the document
 $BIN report --status new --agent          # 0  re-render the brief from the roster
+$BIN report --limit 10 --offset 10 --format md --out PATH --agent   # 0  page a paid slice
+$BIN more --offset 10 --limit 10 --agent  # 1/profile, 0 discovery — the next ten down
 $BIN enrich person/linkedin/slug --agent  # 1  fetch + score one stored row
 $BIN expand company/linkedin/co --agent   # 0  employees / similar profiles from a stored dossier
 $BIN show person/youtube/handle --agent   # 0  one entity, full dossier
@@ -274,6 +325,34 @@ $BIN find "AI video agencies" --deep 8 --dry-run --agent
 Do **not** silently re-rank. Fit is a file the user owns.
 
 > **You:** Fit is scored from `icp.json`, not my judgement — right now it is using [generic rules derived from your topic / your `higgsfield-accounts` file]. Run `icp init` to get an editable template, or tell me what disqualifies these and I will write the `penalty` terms.
+
+### 6. "Top 10 with a writeup I can forward"
+
+One run writes both files. Add your own framings for the field's vocabulary.
+
+```bash
+$BIN find "people building text-to-video tools" --deep 10 \
+  --frame "generative video" --frame "AI film production" \
+  --format md,pdf --out ~/Desktop/text-to-video --agent
+```
+
+> **You:** Ten profiles written up, 17 credits. `~/Desktop/text-to-video.pdf` and `.md` — each person has their role, audience, why they scored where they did, and the query that found them. Four of them turned up under more than one phrasing of the search, which is usually the strongest signal in the set.
+
+### 7. "Give me ten more"
+
+> **WRONG:** re-running `find` with a bigger `--deep`. That re-buys every search.
+
+```bash
+$BIN more --offset 10 --limit 10 --format md,pdf --out ~/Desktop/next-ten --agent
+```
+
+> **You:** Next ten from the same search, 10 credits — no new discovery, these were already found and just needed their profiles. Ranks 11 to 20 are in `~/Desktop/next-ten.pdf`.
+
+### 8. They want it to look good
+
+> **User:** can you make it prettier, this is going to a client
+
+> **You:** Use the HTML version — open `shortlist.html` and print to PDF from the browser. The built-in PDF writer is dependency-free so it can run anywhere, but the browser will typeset it far better.
 
 ---
 

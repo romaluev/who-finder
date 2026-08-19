@@ -18,10 +18,11 @@ import argparse
 import json
 import os
 import re
+import pathlib
 import sys
 from pathlib import Path
 
-from . import __version__, agentio, db, emit, enrich, icp, insights, sources
+from . import __version__, agentio, db, emit, enrich, icp, insights, report, sources
 from .agentio import E_API, E_AUTH, E_BUDGET, E_CONFIG, E_NOTFOUND, E_USAGE
 from .identity import parse_id
 from .planner import detect_scenario, plan as make_plan
@@ -79,7 +80,9 @@ SIGNALS = {
 
 COMMAND_HELP = {
     "find": ("detect scenario, plan queries, search, ingest, rank", "1/angle + 1/enriched"),
-    "report": ("re-render the deep brief from the roster", "0"),
+    "report": ("re-render from the roster; --format writes md/html/pdf/json files", "0"),
+    "more": ("the next --limit down the ranking, enriched; no new search",
+             "1/new profile, 0 discovery"),
     "enrich": ("dossier + ICP fit for stored entities", "1/entity, 0 cached"),
     "expand": ("similar profiles / employees out of a stored dossier", "0"),
     "doctor": ("key, roster path, credits, four-state health", "0, or 1 with --probe"),
@@ -159,7 +162,7 @@ def _ingest(conn, query: str, entities: list[dict], hits: list[dict], ts: str, s
     n_new = n_known = 0
     out = []
     for h in hits:
-        db.upsert_hit(conn, h, query, ts, scenario)
+        db.upsert_hit(conn, h, h.get("found_by") or query, ts, scenario)
     for e in entities:
         novelty = db.upsert_entity(conn, e, query, ts, scenario)
         if novelty == "new":
@@ -342,7 +345,13 @@ def cmd_find(args: argparse.Namespace) -> int:
         return _die(args, E_AUTH, f"missing {ENV_KEY}",
                     fix=f"export {ENV_KEY}=... — the recipient supplies their own key "
                         "from https://scrapecreators.com")
-    p = make_plan(args.brief, scenario=forced, extra_sources=extra)
+    p = make_plan(
+        args.brief,
+        scenario=forced,
+        extra_sources=extra,
+        extra_frames=getattr(args, "frame", None),
+        n_frames=max(1, int(getattr(args, "frames", 3) or 1)),
+    )
     if not p.steps:
         return _die(args, E_USAGE, "planner produced zero steps for this brief",
                     fix="give a brief with a topic in it, or force one with --scenario")
@@ -413,6 +422,32 @@ def cmd_find(args: argparse.Namespace) -> int:
         source_status=source_status,
         errors=errors,
     )
+    if getattr(args, "format", "text") != "text":
+        # A file report covers exactly the rows that were enriched, since an
+        # unenriched row has nothing to fill a page with.
+        shown = rows[: depth or args.show]
+        conn2 = _db(args)
+        try:
+            hits_by_id = {_ident(r): db.hits_for(conn2, r["kind"], r["platform"], r["handle"])
+                          for r in shown}
+        finally:
+            conn2.close()
+        found_by: dict[str, list[str]] = {}
+        for h in hits:
+            q = h.get("found_by")
+            if q:
+                found_by.setdefault(_ident(h), [])
+                if q not in found_by[_ident(h)]:
+                    found_by[_ident(h)].append(q)
+        return _document(
+            args, shown, full, ins,
+            brief=args.brief, scenario=p.scenario, topic=p.topic,
+            n_new=n_new, n_known=n_known, steps=step_labels,
+            frames=[f"{f['label']}: {f['topic']} — {f['why']}" for f in (p.frames or [])],
+            icp_name=cfg.get("name", "generic"), credits=spent,
+            source_status=source_status, hits_by_id=hits_by_id, found_by=found_by,
+        )
+
     if depth:
         table = emit.brief(
             rows,
@@ -542,7 +577,13 @@ def cmd_enrich(args: argparse.Namespace) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    """Re-render the deep brief from the roster. Zero credits, zero network."""
+    """Re-render from the roster. Zero credits, zero network.
+
+    Also the document generator: the same stored data becomes a terminal brief,
+    a Markdown file, a styled HTML page, or a PDF, so a shortlist can be handed
+    to someone who will never open a terminal.
+    """
+    offset = max(0, int(getattr(args, "offset", 0) or 0))
     conn = _db(args)
     try:
         rows = db.list_ranked(
@@ -551,10 +592,17 @@ def cmd_report(args: argparse.Namespace) -> int:
             kind=args.kind,
             query=args.query,
             band=args.band,
-            limit=args.limit,
+            limit=args.limit + offset,
         )
+        hits_by_id = {}
+        if getattr(args, "format", "text") != "text":
+            for r in rows[offset:]:
+                hits_by_id[_ident(r)] = db.hits_for(
+                    conn, r.get("kind"), r.get("platform"), r.get("handle")
+                )
     finally:
         conn.close()
+    rows = rows[offset:]
     full = {}
     for r in rows:
         d = dict(r.get("payload") or {})
@@ -582,6 +630,18 @@ def cmd_report(args: argparse.Namespace) -> int:
         errors=[],
     )
     ins["coverage"] = ["(from roster — no live search was run)"]
+
+    fmt = getattr(args, "format", "text")
+    if fmt != "text":
+        return _document(
+            args, rows, full, ins,
+            brief=args.query or f"Shortlist ({args.status or 'all'})",
+            scenario="report", topic=args.query or "roster",
+            n_new=n_new, n_known=len(rows) - n_new, steps=[], frames=[],
+            icp_name=(rows[0].get("icp") if rows else "") or "generic",
+            credits=0, source_status=[], hits_by_id=hits_by_id, offset=offset,
+        )
+
     payload = {
         "meta": {"source": "who-finder", "version": __version__, "credits_spent": 0},
         "table": emit.brief(
@@ -605,6 +665,154 @@ def cmd_report(args: argparse.Namespace) -> int:
         },
     }
     return _emit(payload, args.agent, args)
+
+
+def _document(args, rows, dossiers, ins, **kw) -> int:
+    """Build the report document once and write every requested format.
+
+    `--format md,pdf` writes both from one build, so the PDF can never describe
+    a different shortlist than the Markdown beside it.
+    """
+    fmts = [f.strip() for f in str(getattr(args, "format", "md")).split(",") if f.strip()]
+    bad = [f for f in fmts if f not in report.FORMATS]
+    if bad:
+        return _die(args, E_USAGE, f"unknown report format {bad[0]!r}",
+                    fix=f"use one of: {', '.join(report.FORMATS)}, or text for the terminal")
+
+    blocks = report.build(rows, dossiers, ins, **kw)
+    title = kw.get("brief") or "who-finder report"
+    stem = getattr(args, "out", None) or _slug(title)
+    stem = re.sub(r"\.(md|html|pdf|json)$", "", str(stem))
+
+    written = []
+    for fmt in fmts:
+        body = report.render(blocks, fmt, title=title)
+        path = pathlib.Path(f"{stem}.{fmt}").expanduser()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(body, bytes):
+                path.write_bytes(body)
+            else:
+                path.write_text(body, encoding="utf-8")
+        except OSError as exc:
+            return _die(args, E_DELIVERY, f"could not write {path}: {exc}",
+                        fix="pick a writable --out path")
+        written.append({"format": fmt, "path": str(path.resolve()),
+                        "bytes": path.stat().st_size})
+
+    lines = [f"Wrote {len(written)} file{'' if len(written) == 1 else 's'} "
+             f"covering {len(rows)} {'person' if len(rows) == 1 else 'people'}:", ""]
+    for w in written:
+        lines.append(f"  {w['path']}   ({w['bytes'] // 1024 or 1} KB)")
+    if any(w["format"] == "html" for w in written):
+        lines += ["", "Open the .html in a browser and print to PDF if you want the",
+                  "styled version — the .pdf here is generated without a browser."]
+    return _emit(
+        {
+            "meta": {"source": "who-finder", "version": __version__, "credits_spent": 0},
+            "table": "\n".join(lines),
+            "results": {"written": written, "count": len(rows),
+                        "offset": kw.get("offset", 0)},
+        },
+        args.agent, args,
+    )
+
+
+def _slug(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-")
+    return f"who-finder-{s[:48] or 'report'}"
+
+
+def cmd_more(args: argparse.Namespace) -> int:
+    """Extend a shortlist without searching again.
+
+    The roster usually holds far more candidates than the first report showed,
+    because discovery returns everyone and enrichment only pays for the top
+    slice. `more` walks further down that existing ranking and enriches the
+    next batch, so asking for ten more costs enrichment only.
+    """
+    token = _token()
+    offset = max(0, int(args.offset or 0))
+    ts = db.now()
+    conn = _db(args)
+    try:
+        rows = db.list_ranked(conn, status=args.status, kind=args.kind,
+                              query=args.query, band=None, limit=offset + args.limit)
+        batch = rows[offset:]
+        if not batch:
+            conn.close()
+            return _die(args, E_NOTFOUND,
+                        f"nothing left below rank {offset} for this filter",
+                        fix="run find again with a wider brief, or drop --query")
+
+        spent = 0
+        errors: list[str] = []
+        todo = [r for r in batch if not r.get("enriched")]
+        if todo and not token:
+            conn.close()
+            return _die(args, E_AUTH,
+                        f"{len(todo)} of these have no profile yet and {ENV_KEY} is unset",
+                        fix=f"export {ENV_KEY}=... , or use `report --offset` to page "
+                            "through what is already stored")
+        cfg = icp.load(args.icp, topic=args.query or "")
+        dossiers: dict[str, dict] = {}
+        if todo:
+            dossiers, errors, spent = enrich.enrich_many(
+                token, todo, limit=len(todo), cache=args.cache
+            )
+        for r in batch:
+            r["novelty"] = "new" if r.get("status") == "new" else "known"
+        full = _score_rows(conn, batch, dossiers, cfg, ts)
+        conn.commit()
+        hits_by_id = {_ident(r): db.hits_for(conn, r["kind"], r["platform"], r["handle"])
+                      for r in batch}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    batch = icp.rank(batch)
+    n_new = sum(1 for r in batch if r.get("novelty") == "new")
+    ins = insights.build(batch, list(full.values()), scenario="report",
+                         topic=args.query or "roster", n_new=n_new,
+                         n_known=len(batch) - n_new, source_status=[], errors=errors)
+    if getattr(args, "format", "text") != "text":
+        return _document(
+            args, batch, full, ins,
+            brief=args.query or "Shortlist (continued)", scenario="report",
+            topic=args.query or "roster", n_new=n_new, n_known=len(batch) - n_new,
+            steps=[], frames=[], icp_name=cfg.get("name", "generic"),
+            credits=spent, source_status=[], hits_by_id=hits_by_id, offset=offset,
+        )
+    return _emit(
+        {
+            "meta": {"source": "who-finder", "version": __version__,
+                     "credits_spent": spent, "offset": offset},
+            "table": emit.brief(batch, full, ins, scenario="report",
+                                topic=args.query or "roster", n_new=n_new,
+                                n_known=len(batch) - n_new, steps=[],
+                                icp_name=cfg.get("name", "generic"),
+                                enriched_n=sum(1 for r in batch if r.get("enriched")),
+                                credits=spent, show=len(batch)),
+            "results": {"insights": ins, "entities": [_compact(r) for r in batch]},
+        },
+        args.agent, args,
+    )
+
+
+def _merge_dossier(r: dict) -> dict:
+    d = dict(r.get("payload") or {})
+    d.setdefault("id", _ident(r))
+    for k in ("headline", "headline_source", "audience", "audience_kind"):
+        d[k] = r.get(k) or d.get(k)
+    d["signals"] = r.get("signals") or d.get("signals") or []
+    d["topics"] = r.get("topics") or d.get("topics") or []
+    d["enriched"] = bool(r.get("enriched"))
+    d["fit_score"] = r.get("fit_score")
+    d["fit_band"] = r.get("fit_band")
+    d["fit_reasons"] = r.get("fit_reasons") or []
+    return d
 
 
 def cmd_expand(args: argparse.Namespace) -> int:
@@ -1167,6 +1375,14 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--new-only", action="store_true")
     f.add_argument("--deep", type=int, default=0, metavar="N",
                    help="enrich the top N (1 credit each) and produce the full brief")
+    f.add_argument("--frames", type=int, default=3, metavar="N",
+                   help="ask the question N ways (default 3). each extra frame is 1 search")
+    f.add_argument("--frame", action="append", default=None, metavar="PHRASE",
+                   help="another way to say the topic, e.g. --frame 'generative creative'. repeatable")
+    f.add_argument("--format", default="text",
+                   help=f"text (default) or a file report: {', '.join(report.FORMATS)} (comma-separated)")
+    f.add_argument("--out", default=None, metavar="PATH",
+                   help="output path without extension; defaults to a slug of the brief")
     f.add_argument("--dry-run", action="store_true",
                    help="print the exact queries and the credit ceiling, spend nothing")
     f.add_argument("--max-credits", type=int, default=None, metavar="N",
@@ -1186,8 +1402,26 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--kind", default=None, choices=["person", "company"])
     rp.add_argument("--query", default=None)
     rp.add_argument("--band", default=None, choices=list(icp.BANDS))
-    rp.add_argument("--limit", type=int, default=25)
+    rp.add_argument("--limit", type=int, default=25, help="how many to include (the 'top 10')")
+    rp.add_argument("--offset", type=int, default=0,
+                    help="skip the first N of the ranking, to page past a report already sent")
+    rp.add_argument("--format", default="text",
+                    help=f"text (default) or files: {', '.join(report.FORMATS)} (comma-separated)")
+    rp.add_argument("--out", default=None, metavar="PATH", help="output path without extension")
     rp.set_defaults(fn=cmd_report)
+
+    mo = sub.add_parser("more", parents=[shared, deep],
+                        help="the next N down the ranking, enriched — no new search")
+    mo.add_argument("--offset", type=int, default=10,
+                    help="rank to resume from; pass the count you have already seen")
+    mo.add_argument("--limit", type=int, default=10, help="how many more to add")
+    mo.add_argument("--status", default=None)
+    mo.add_argument("--kind", default=None, choices=["person", "company"])
+    mo.add_argument("--query", default=None, help="restrict to a stored query, as in report")
+    mo.add_argument("--format", default="text",
+                    help=f"text (default) or files: {', '.join(report.FORMATS)}")
+    mo.add_argument("--out", default=None, metavar="PATH")
+    mo.set_defaults(fn=cmd_more)
 
     ex = sub.add_parser("expand", parents=[shared, deep], help="pull similar profiles / employees out of a dossier")
     ex.add_argument("identity")

@@ -213,10 +213,15 @@ def fit(d: dict, cfg: dict) -> dict:
             score += gw
             reasons.append(f"geo match (+{gw:.0f})")
 
+    # Capped like boosts. Signals correlate heavily with each other — an active
+    # account tends to trip several at once — so an uncapped sum lets a single
+    # underlying trait push an otherwise mediocre profile to the top band.
+    sig_total = 0.0
     for sig, pts in (cfg.get("signals") or {}).items():
         if sig in (d.get("signals") or []):
-            score += float(pts)
+            sig_total += float(pts)
             reasons.append(f"signal {sig} (+{pts})")
+    score += min(sig_total, 12.0)
 
     score = max(0.0, min(100.0, score))
 

@@ -41,6 +41,27 @@ INDEX = (
         "note": "dotted paths, element-wise over lists; meta and error always survive",
     },
     {
+        "needles": ("report", "pdf", "document", "write it up", "writeup", "share with",
+                    "send to", "forward", "deck", "one pager", "markdown file", "html"),
+        "run": 'find "BRIEF" --deep 10 --format md,pdf --out ~/Desktop/shortlist --agent',
+        "note": "md | html | pdf | json, comma-separated. the pdf needs nothing installed; "
+                "html is the best-looking and prints to a better pdf from a browser",
+    },
+    {
+        "needles": ("more", "next ten", "another batch", "keep going", "show me more",
+                    "beyond the top", "page", "offset", "rest of them"),
+        "run": "more --offset 10 --limit 10 --agent",
+        "note": "continues down the ranking already discovered. enrichment only, no new "
+                "search. use `report --offset N` for a free re-cut of what is already enriched",
+    },
+    {
+        "needles": ("synonym", "other words", "rephrase", "reframe", "different wording",
+                    "broaden", "not finding anyone", "too narrow", "framing"),
+        "run": 'find "BRIEF" --frames 4 --frame "the field\'s other name for it" --agent',
+        "note": "engine derives literal/exact/broad; you supply the vocabulary it cannot know. "
+                "one extra search per frame",
+    },
+    {
         "needles": ("save to file", "write to", "webhook", "deliver", "pipe", "send output"),
         "run": "export --status new --deliver file:handoff.csv --agent",
         "note": "sinks: stdout | file:<path> | webhook:<url>",

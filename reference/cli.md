@@ -159,19 +159,37 @@ $BIN find "BRIEF" [--deep N] [--scenario S] [--sources a,b] [--limit N]
                   [--freshness month|year|all] [--new-only] [--dry-run]
                   [--max-credits N] [--icp PATH] [--cache 1d|3d|7d|14d|30d]
                   [--show N] [--full]
+                  [--frames N] [--frame PHRASE ...]
+                  [--format md,html,pdf,json] [--out PATH]
 ```
 
-Detects the scenario, plans angles, searches, parses identities, de-dupes against the roster, enriches the top `N`, scores ICP fit, ranks, renders.
+Detects the scenario, plans angles, reframes the topic, searches, parses identities, de-dupes against the roster, enriches the top `N`, scores ICP fit, ranks, renders.
 
 `--full` includes complete dossiers in the JSON; without it `results.dossiers` is empty and the compact per-entity fields carry the summary. `--show` controls how many cards the rendered brief prints, independent of how many entities the JSON carries.
+
+`--frames N` (default 3) caps how many ways the topic is asked; `--frames 1` disables reframing. `--frame PHRASE` is repeatable and adds vocabulary the engine cannot derive. Each extra frame is exactly one more search. See [framing.md](framing.md).
+
+`--format` writes files instead of printing a brief, and `--out` is a path **without** an extension. See [reports.md](reports.md).
 
 ### `report` — re-render for free
 
 ```bash
-$BIN report [--status S] [--kind K] [--query Q] [--band B] [--limit N]
+$BIN report [--status S] [--kind K] [--query Q] [--band B]
+            [--limit N] [--offset N] [--format F] [--out PATH]
 ```
 
-Rebuilds the deep brief from stored data. Zero credits, no network. This is the correct response to "show me that again", "just the strong ones", or "the companies only" — never re-run `find` for those.
+Rebuilds from stored data. Zero credits, no network. This is the correct response to "show me that again", "just the strong ones", or "the companies only" — never re-run `find` for those.
+
+`--limit` is the size of the slice and `--offset` skips that many from the top, keeping true rank numbers so two reports can sit side by side. With `--format` it writes documents rather than printing.
+
+### `more` — the next N, without searching again
+
+```bash
+$BIN more [--offset N] [--limit N] [--status S] [--kind K] [--query Q]
+          [--format F] [--out PATH]
+```
+
+Walks further down the ranking discovery already produced and enriches whatever has not been enriched yet: **one credit per new profile, zero for discovery.** Exits `3` when the ranking is exhausted, and `4` if unenriched rows remain but no API key is set — in that case `report --offset N` still pages through what is already stored, for free.
 
 ### `enrich` — fill in stored rows
 

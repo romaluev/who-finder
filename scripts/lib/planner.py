@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from . import frames
 from .scenarios import (
     COMPANY_WORDS,
     DETECT_ORDER,
@@ -52,6 +53,7 @@ class Plan:
     steps: list[Step] = field(default_factory=list)
     side_b: str | None = None
     note: str = ""
+    frames: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -60,6 +62,7 @@ class Plan:
             "topic": self.topic,
             "side_b": self.side_b,
             "note": self.note,
+            "frames": self.frames,
             "steps": [
                 {
                     "source": s.source,
@@ -170,7 +173,14 @@ def _fallback_query(source: str, topic_tmpl: str, scenario: str) -> str:
     return topic_tmpl
 
 
-def plan(brief: str, scenario: str | None = None, extra_sources: list[str] | None = None) -> Plan:
+def plan(brief: str, scenario: str | None = None, extra_sources: list[str] | None = None,
+         extra_frames: list[str] | None = None, n_frames: int = 3) -> Plan:
+    """Build the query plan.
+
+    Frames are derived here rather than by the caller so they are built from
+    the extracted topic ("ai video ads") and not the raw brief ("find me people
+    making ai video ads"), which would put filler words into every query.
+    """
     scenario = detect_scenario(brief, scenario)
     spec = SCENARIOS[scenario]
     if scenario == "compare":
@@ -200,7 +210,9 @@ def plan(brief: str, scenario: str | None = None, extra_sources: list[str] | Non
 
     topic = core_topic(brief)
     p = Plan(scenario=scenario, kind=spec["kind"], topic=topic)
-    for ang in _angles_for(scenario, extra_sources):
+    frame_list = frames.derive(topic, scenario, extra=extra_frames, limit=max(1, n_frames))
+    angles = _angles_for(scenario, extra_sources)
+    for ang in angles:
         p.steps.append(
             Step(
                 source=ang["source"],
@@ -209,6 +221,23 @@ def plan(brief: str, scenario: str | None = None, extra_sources: list[str] | Non
                 weight=float(ang.get("weight") or 1.0),
             )
         )
+
+    # Extra framings ride only the primary angle. Crossing every frame with
+    # every angle would multiply the bill for steeply diminishing returns.
+    if frame_list:
+        p.frames = [f.as_dict() for f in frame_list]
+        primary = angles[0] if angles else None
+        for f in frame_list[1:]:
+            if not primary:
+                break
+            p.steps.append(
+                Step(
+                    source=primary["source"],
+                    query=_render(primary["template"], f.topic),
+                    label=f"{primary['label']}~{f.label}",
+                    weight=float(primary.get("weight") or 1.0) * f.weight,
+                )
+            )
     return _dedupe(p)
 
 

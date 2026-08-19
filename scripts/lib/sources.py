@@ -539,6 +539,11 @@ def run_plan(
                 }
             )
             continue
+        for h in hits:
+            # Tag each hit with the query that produced it. With several framings
+            # in flight, "which phrasing surfaced this person" is a real finding,
+            # and it is lost the moment the hits are pooled.
+            h.setdefault("found_by", step.query)
         all_hits.extend(hits)
         raw_n = pr.get("raw_n", 0)
         # A zero-hit step is only a real absence when our own container was

@@ -239,7 +239,9 @@ def _linkedin_person(d: dict, raw: dict) -> None:
     if isinstance(exp, list) and exp:
         org = clean(exp[0].get("name")) if isinstance(exp[0], dict) else ""
         if org:
-            d["headline"] = f"at {org}"
+            # Usually a bare company name, but some payloads put the whole
+            # "Title at Company" in here, and "at Title at Company" reads badly.
+            d["headline"] = org if " at " in org else f"at {org}"
             d["headline_source"] = "linkedin-experience"
             d["company"]["current"] = org
             d["company"]["url"] = clean(exp[0].get("url"))
