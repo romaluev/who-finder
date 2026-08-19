@@ -37,9 +37,12 @@ def test_discover_linkedin_never_fetches_linkedin(monkeypatch):
         fetched.append(url)
         raise AssertionError(f"must not fetch {url}")
 
+    def boom(*_a, **_k):
+        raise AssertionError("YouTube is not the LinkedIn path")
+
     monkeypatch.setattr("rating.collectors.public.search_web", fake_search)
     monkeypatch.setattr("rating.collectors.public.http.get_text", fake_get_text)
-    monkeypatch.setattr("rating.collectors.public.ytdlp_bin", lambda: "")
+    monkeypatch.setattr("rating.collectors.public.ytdlp_search", boom)
 
     prof, posts = PublicCollector().discover_linkedin("https://www.linkedin.com/in/jamiezetz")
     assert fetched == []

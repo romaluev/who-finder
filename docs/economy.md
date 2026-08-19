@@ -1,20 +1,21 @@
-# Economy — use Clay, don't buy a second scraper
+# Economy — LinkedIn first
 
-The company already pays for Clay. Use that first.
+This list is LinkedIn people. LinkedIn is the channel. YouTube is optional.
+
+We never log into LinkedIn and never open `linkedin.com`. Public LinkedIn means the search index (`find`, or DuckDuckGo/Brave `site:linkedin.com/in/...`). Full profile pages and post counts need a key or a Clay export.
 
 ```bash
+./who-finder find "CMO AI video ads"
 ./who-finder rate ~/Downloads/clay-export.csv
 ```
 
-No Clay API key. Title, company, and size come from the export.
-
-| Use this | Not this |
+| LinkedIn (primary) | Only if you asked for video |
 |---|---|
-| Clay table export | Apollo (same job) |
-| `yt-dlp` on a YouTube URL | ScrapeCreators for video |
-| `find` / DuckDuckGo | a paid search just to get names |
-| Bright Data | only if LinkedIn post counts are still missing |
+| Public search index | `yt-dlp` on a YouTube URL |
+| Clay table export | ScrapeCreators for video |
+| ScrapeCreators profile (if keyed) | |
+| Bright Data last, for post counts still missing | |
 
-`--cheap` on `find` or `run` skips a new invoice.
+`--cheap` skips a new invoice.
 
-Clay tells you **who they are**. It does not tell you how their posts perform. A price needs posts (yt-dlp, a posts CSV, or Bright Data).
+Clay tells you **who they are**. A LinkedIn price needs LinkedIn posts — not YouTube subscribers.

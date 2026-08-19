@@ -635,43 +635,23 @@ class PublicCollector(Collector):
         return parse_public_html(html, url)
 
     def discover_linkedin(self, url: str) -> tuple[Profile | None, list[Post]]:
-        """Name, headline, and public posts for a LinkedIn URL — without fetching it.
+        """LinkedIn is the channel. Search the public index. Do not fetch the page.
 
-        DuckDuckGo (or Brave) already indexed the profile. YouTube/TikTok
-        posts are pulled with yt-dlp when a matching channel is in the
-        results. linkedin.com itself is never requested.
+        Same path as `find`: DuckDuckGo/Brave `site:linkedin.com/in/{handle}`.
+        YouTube is not consulted — a LinkedIn shortlist is not a YouTube list.
+        linkedin.com itself is never requested.
         """
         url = norm_url(url)
         handle = linkedin_handle(url)
         if not handle:
             return None, []
-        hits, backend = search_web(f"linkedin.com/in/{handle}", limit=8)
+        hits, backend = search_web(f"site:linkedin.com/in/{handle}", limit=8)
         timed_out = "timed out" in str(backend or "")
         if not hits and not timed_out:
-            hits, backend = search_web(f"{handle} LinkedIn", limit=8)
+            hits, _ = search_web(f'"{handle}" site:linkedin.com/in', limit=8)
         name, headline, about, followers, connections, posts = _identity_from_hits(
             hits, handle
         )
-        seed = name or handle.replace("-", " ")
-        yt_queries = []
-        if name:
-            yt_queries.append(name)
-        yt_queries.append(seed)
-        if handle not in yt_queries:
-            yt_queries.append(handle)
-        for q in yt_queries:
-            yt_prof, yt_posts = ytdlp_search(q, n=8)
-            channel = (yt_prof or {}).get("name") or ""
-            if not yt_posts or not channel_fits_handle(handle, channel):
-                continue
-            if not name and channel:
-                name = channel.split("|")[0].split(" - ")[0].strip()
-            if not headline and (yt_prof or {}).get("headline"):
-                headline = clean(yt_prof.get("headline") or "", 180)
-            followers = max(followers, int((yt_prof or {}).get("followers") or 0))
-            posts.extend(yt_posts)
-            about = about or clean((yt_prof or {}).get("about") or "", 800)
-            break
         seen: set[str] = set()
         uniq: list[Post] = []
         for p in posts:

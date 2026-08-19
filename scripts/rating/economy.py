@@ -34,8 +34,8 @@ def skip_reason(
         return "cheap mode: skip a new invoice"
     if backend == "apollo" and clay_on:
         return "clay already covers seed-pool and ABM-style firmographics"
-    if backend == "scrapecreators" and has_video:
-        return "public video (yt-dlp / who-finder) already measures this"
+    if backend == "scrapecreators" and has_video and platform in {"youtube", "tiktok"}:
+        return "public video (yt-dlp) already measures this YouTube/TikTok URL"
     if backend == "brightdata" and has_posts:
         return "posts already stored"
     if backend == "brightdata" and platform in {"youtube", "tiktok"} and has_video:
@@ -56,11 +56,18 @@ def lite_plan(
     platform = platform_of(url)
     steps = []
 
-    steps.append({
-        "backend": "public",
-        "cost": 0,
-        "why": "public search / yt-dlp / RSS — LinkedIn itself is never fetched",
-    })
+    if platform == "linkedin" or is_blocked(url):
+        steps.append({
+            "backend": "public",
+            "cost": 0,
+            "why": "public LinkedIn index (DuckDuckGo/Brave) — linkedin.com is never fetched",
+        })
+    else:
+        steps.append({
+            "backend": "public",
+            "cost": 0,
+            "why": "yt-dlp / RSS / public HTML — no key",
+        })
 
     if (caps.get("clay") or {}).get("available"):
         steps.append({
