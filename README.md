@@ -9,7 +9,7 @@ Python 3.11+. No pip, no build step. One dependency: a [ScrapeCreators](https://
 ## What you get
 
 ```
-who-finder v3.1.0  scenario=people  topic=making ai video ads  new=3 known=0
+who-finder v3.2.0  scenario=people  topic=making ai video ads  new=3 known=0
 plan:     linkedin_people:li-in | linkedin_people:li-titles | youtube:yt | x:x
 coverage: linkedin_people:li-in ok(2) | youtube:yt ok(1) | x:x no-results
 depth:    enriched 3/3  icp=higgsfield  credits~8
@@ -55,7 +55,7 @@ Use `~/.claude/skills/who-finder` for Claude, or `.claude/skills/who-finder` ins
 
 ### Verification status — read this once
 
-The parsers here were written against ScrapeCreators' **documented** response shapes and are covered by 87 offline tests. They have **not** been exercised against a live API key. Run `doctor --probe` as your first command.
+The parsers here were written against ScrapeCreators' **documented** response shapes and are covered by 115 offline tests. They have **not** been exercised against a live API key. Run `doctor --probe` as your first command.
 
 If upstream has moved a field since, you will not get a silent empty result: any source that answers in a shape the parsers cannot read is reported as `UNPARSED` with a `SCHEMA DRIFT` line naming the source and the new key path. Zero rows under that banner is a parser bug, not an empty market. Send that line along in a bug report and the fix is usually one key.
 
@@ -119,6 +119,35 @@ $B import known-customers.csv                      # seed a skip list
 
 Add `--agent` to any command for JSON.
 
+### Built for agents
+
+| flag | why it matters |
+|---|---|
+| `--agent` | one JSON envelope on stdout: `{meta, plan, table, results}` |
+| `--dry-run` | exact queries + credit ceiling, zero spend, no key needed |
+| `--max-credits N` | refuse (exit 8) before the first request if the plan costs more |
+| `--select PATHS` | keep only the fields you will read; `meta` and `error` always survive |
+| `--deliver SINK` | `stdout` \| `file:<path>` \| `webhook:<url>`, atomic file writes |
+| `--profile NAME` | saved flag sets for repeat runs; explicit flags still win |
+
+```bash
+$B agent-context --agent    # the whole CLI described from live constants
+$B which "how much will this cost" --agent
+$B find "..." --deep 10 --agent --select results.n_new,results.entities.id,results.entities.priority
+$B profile save nightly --set deep=10 --set scenario=people
+$B --profile nightly find "AI video ops hires" --agent
+```
+
+Every failure is branchable rather than a stack trace:
+
+```json
+{"meta":{"ok":false},"error":{"code":8,"name":"budget refused — ...",
+ "message":"plan needs up to 25 credits, --max-credits is 6",
+ "fix":"raise --max-credits, lower --deep, or narrow --sources"}}
+```
+
+`0` success · `2` usage · `3` not found · `4` auth · `5` upstream · `8` budget · `9` delivery · `10` config
+
 ### Cost
 
 | call | credits |
@@ -128,6 +157,24 @@ Add `--agent` to any command for JSON.
 | `report`, `expand`, `show`, `export`, `mark`, `import` | 0 |
 
 `find "brief" --deep 10` typically costs ~15 credits. Bare `find` costs one per angle and returns names only.
+
+**See the bill before you pay it.** `--dry-run` prints the exact queries the planner built and the credit ceiling, without touching the network or needing a key:
+
+```bash
+$B find "AI video tooling" --deep 25 --dry-run
+```
+```
+PLANNED QUERIES (5)
+  1. linkedin_people     li-in
+     q: site:linkedin.com/in ai video tooling
+  ...
+COST CEILING
+  discovery        5 credits (1 per query above)
+  enrichment  <=  25 credits (1 per profile, 0 on a cache hit)
+  total       <=  30 credits
+```
+
+`--max-credits N` turns that ceiling into a hard stop: the run exits 8 before the first request rather than overspending.
 
 ## Where the data lives
 
@@ -142,7 +189,7 @@ Send messages. Log into LinkedIn or use cookies, Sales Navigator, or a member se
 ## Tests
 
 ```bash
-python3 -m pytest tests -q      # 74 tests, no network, no key required
+python3 -m pytest tests -q      # 115 tests, no network, no key required
 ```
 
 The suite fakes the HTTP layer with the exact response shapes ScrapeCreators documents, so the whole pipeline — plan, search, identity, roster, enrich, fit, rank, render — is covered offline.

@@ -15,6 +15,21 @@ That is the whole onboarding. No pip, no build, no config file required on day o
 
 Swap the clone path for `~/.claude/skills/who-finder` or, for a single project, `.claude/skills/who-finder` inside the repo they are working in.
 
+## Their agent can learn the tool by itself
+
+Two commands mean nobody has to read documentation before their first useful run:
+
+```bash
+python3 .../who_finder.py agent-context --agent          # the whole CLI, machine-readable
+python3 .../who_finder.py which "how much will this cost"
+```
+
+And nobody has to guess what a search will cost. `--dry-run` prints the exact queries and the credit ceiling without spending anything or even needing a key — it is the safest possible first command:
+
+```bash
+python3 .../who_finder.py find "AI video agencies" --deep 10 --dry-run
+```
+
 ## Each person needs their own API key
 
 Credits are billed per key, so keys are not shared. `doctor` reports `skipped-unconfigured` and exits 4 until one is set, which is a clear signal rather than a confusing empty result.

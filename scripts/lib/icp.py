@@ -72,11 +72,27 @@ def config_path(explicit: str | None = None) -> Path:
     return home() / "icp.json"
 
 
+class ConfigError(RuntimeError):
+    """A hand-edited ICP file that cannot be used.
+
+    Raised rather than silently falling back to the generic rules: someone who
+    edited this file expects their rules to be the ones scoring the run, and a
+    quiet fallback would produce a plausible ranking against the wrong ICP.
+    """
+
+
 def load(explicit: str | None = None, topic: str = "") -> dict:
     """Explicit path > env > <home>/icp.json > GENERIC seeded with the topic."""
     path = config_path(explicit)
     if path.exists():
-        cfg = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ConfigError(f"{path} is not valid JSON (line {exc.lineno}: {exc.msg})") from exc
+        except OSError as exc:
+            raise ConfigError(f"{path} could not be read: {exc}") from exc
+        if not isinstance(cfg, dict):
+            raise ConfigError(f"{path} must contain a JSON object, got {type(cfg).__name__}")
         cfg.setdefault("name", path.stem)
         cfg["_path"] = str(path)
         return cfg

@@ -18,6 +18,44 @@ INDEX = (
         "run": "scenarios --agent",
     },
     {
+        "needles": ("what can this do", "capabilities", "commands", "what flags", "how do i use",
+                    "exit code", "introspect"),
+        "run": "agent-context --agent",
+        "note": "the whole CLI described from live constants — commands, costs, codes, paths",
+    },
+    {
+        "needles": ("how much", "cost", "credits", "price", "expensive", "budget", "preview",
+                    "before running", "estimate", "dry run"),
+        "run": 'find "BRIEF" --deep 10 --dry-run --agent',
+        "note": "prints the exact queries and the credit ceiling; spends nothing, needs no key",
+    },
+    {
+        "needles": ("cap", "limit spend", "max credits", "do not overspend"),
+        "run": 'find "BRIEF" --deep 10 --max-credits 20 --agent',
+        "note": "exits 8 before the first request if the plan would cost more",
+    },
+    {
+        "needles": ("too much output", "smaller", "fewer fields", "context", "just the ids",
+                    "trim", "select"),
+        "run": 'find "BRIEF" --deep 10 --agent --select results.entities.id,results.entities.priority',
+        "note": "dotted paths, element-wise over lists; meta and error always survive",
+    },
+    {
+        "needles": ("save to file", "write to", "webhook", "deliver", "pipe", "send output"),
+        "run": "export --status new --deliver file:handoff.csv --agent",
+        "note": "sinks: stdout | file:<path> | webhook:<url>",
+    },
+    {
+        "needles": ("same flags", "every time", "reuse", "profile", "saved settings", "scheduled"),
+        "run": "profile save nightly --set deep=10 --set scenario=people",
+        "note": "then `--profile nightly find \"BRIEF\"`; explicit flags still win",
+    },
+    {
+        "needles": ("surprised", "feedback", "bug", "wrong", "report an issue"),
+        "run": 'feedback "what surprised you" --agent',
+        "note": "appends to <home>/feedback.jsonl; never transmitted",
+    },
+    {
         "needles": ("icp", "fit rules", "scoring rules", "ideal customer", "qualify"),
         "run": "icp show --agent",
         "note": "`icp init` writes an editable template to .who-finder/icp.json",

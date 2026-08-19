@@ -15,6 +15,37 @@ from .util import human, to_int
 BAND_MARK = {"strong": "STRONG", "possible": "MAYBE ", "weak": "weak  ", "off": "off   ", "unknown": "?     "}
 
 
+def plan_card(plan, est: dict, *, depth: int, icp_name: str) -> str:
+    """What `--dry-run` shows: the exact queries and the ceiling on cost.
+
+    Printed before anything is spent so the operator approves a real number
+    instead of agreeing to "a search".
+    """
+    lines = [
+        f"who-finder v{__version__}  DRY RUN — nothing spent, nothing stored",
+        f"scenario: {plan.scenario} ({plan.kind})   topic: {plan.topic}"
+        + (f"   vs: {plan.side_b}" if plan.side_b else ""),
+        f"icp:      {icp_name}",
+        "",
+        f"PLANNED QUERIES ({len(plan.steps)})",
+    ]
+    for i, s in enumerate(plan.steps, 1):
+        side = f" [side {s.side}]" if s.side else ""
+        lines.append(f" {i:>2}. {s.source:<19} {s.label:<12}{side}")
+        lines.extend(_wrap(s.query, bullet="     q: ", width=96))
+    lines.append("")
+    lines.append("COST CEILING")
+    lines.append(f"  discovery      {est['discovery']:>3} credits (1 per query above)")
+    if depth:
+        lines.append(f"  enrichment  <= {est['enrichment_max']:>3} credits (1 per profile, 0 on a cache hit)")
+    lines.append(f"  total       <= {est['total_max']:>3} credits")
+    lines.append("")
+    lines.append("Re-run without --dry-run to execute. Add --max-credits N to hard-cap it.")
+    if plan.note:
+        lines.append(f"note: {plan.note}")
+    return "\n".join(lines)
+
+
 def brief(
     rows: list[dict],
     dossiers: dict[str, dict],

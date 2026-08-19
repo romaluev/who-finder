@@ -5,6 +5,11 @@ Two depths:
   find "brief" --deep 10    + a dossier, ICP fit and priority for the top 10
 
 `report` re-renders the deep brief from the local roster for zero credits.
+
+Because every search costs money, the cost gates come before the network:
+`--dry-run` prints the planned queries and the ceiling without spending or
+even needing a key, and `--max-credits` refuses an over-budget plan at exit 8
+rather than reporting the overspend afterwards.
 """
 
 from __future__ import annotations
@@ -12,10 +17,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
-from . import __version__, db, emit, enrich, icp, insights, sources
+from . import __version__, agentio, db, emit, enrich, icp, insights, sources
+from .agentio import E_API, E_AUTH, E_BUDGET, E_CONFIG, E_NOTFOUND, E_USAGE
 from .identity import parse_id
 from .planner import detect_scenario, plan as make_plan
 from .scenarios import SCENARIOS, SOURCES
@@ -70,19 +77,65 @@ SIGNALS = {
 }
 
 
+COMMAND_HELP = {
+    "find": ("detect scenario, plan queries, search, ingest, rank", "1/angle + 1/enriched"),
+    "report": ("re-render the deep brief from the roster", "0"),
+    "enrich": ("dossier + ICP fit for stored entities", "1/entity, 0 cached"),
+    "expand": ("similar profiles / employees out of a stored dossier", "0"),
+    "doctor": ("key, roster path, credits, four-state health", "0, or 1 with --probe"),
+    "agent-context": ("machine-readable description of this whole CLI", "0"),
+    "which": ("map a capability phrase to a command", "0"),
+    "scenarios": ("list engine-owned search types", "0"),
+    "signals": ("signal names you can score in icp.json", "0"),
+    "icp": ("show or create the fit config", "0"),
+    "search": ("one raw keyword, no planner (debug hatch)", "1"),
+    "new": ("entities still marked new", "0"),
+    "list": ("list stored entities", "0"),
+    "show": ("one entity + dossier + hits + snapshots", "0"),
+    "mark": ("new|watched|outreached|skip|customer", "0"),
+    "export": ("CSV handoff (does not send)", "0"),
+    "import": ("seed skip/customer/outreached from CSV", "0"),
+    "profile": ("save/list/show/delete a reusable flag set", "0"),
+    "feedback": ("record what surprised you about this CLI", "0"),
+}
+
+
+def _command_index() -> list[dict]:
+    return [
+        {"command": name, "does": does, "credits": cost}
+        for name, (does, cost) in COMMAND_HELP.items()
+    ]
+
+
 def _token() -> str:
     return os.environ.get(ENV_KEY, "").strip()
 
 
-def _emit(payload: dict, agent: bool) -> None:
-    if agent:
+def _emit(payload: dict, agent: bool, args: argparse.Namespace | None = None) -> int:
+    return agentio.emit(
+        payload,
+        agent=agent,
+        sink=getattr(args, "deliver", None),
+        spec=getattr(args, "select", None),
+    )
+
+
+def _die(args: argparse.Namespace, code: int, message: str, fix: str = "", **extra) -> int:
+    """Emit a branchable error envelope and return its exit code.
+
+    Errors go to stdout in `--agent` mode for the same reason results do: a
+    caller that has to correlate stderr with stdout to learn why a run failed
+    will skip the step and guess instead.
+    """
+    payload = agentio.fail(code, message, fix=fix, **extra)
+    if getattr(args, "agent", False):
         json.dump(payload, sys.stdout, ensure_ascii=False)
         sys.stdout.write("\n")
-        return
-    if payload.get("table"):
-        print(payload["table"])
-        return
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(f"error [{code}] {message}", file=sys.stderr)
+        if fix:
+            print(f"fix: {fix}", file=sys.stderr)
+    return code
 
 
 def _db(args: argparse.Namespace):
@@ -129,8 +182,25 @@ def _parse_sources(raw: str | None) -> list[str] | None:
     srcs = [s.strip() for s in raw.split(",") if s.strip()]
     bad = [s for s in srcs if s not in SOURCES]
     if bad:
-        raise SystemExit(f"unknown sources: {bad}. want {list(SOURCES)}")
+        raise ValueError(f"unknown sources: {bad}. want {list(SOURCES)}")
     return srcs
+
+
+def _estimate(plan, depth: int) -> dict:
+    """Credit cost of a plan before any of it is spent.
+
+    Discovery is one credit per query angle; enrichment is one per entity, and
+    only up to the number of entities discovery can actually return. Cached
+    profile reads cost nothing, so this is a ceiling rather than a forecast.
+    """
+    discovery = len(plan.steps)
+    enrichment = max(0, int(depth or 0))
+    return {
+        "discovery": discovery,
+        "enrichment_max": enrichment,
+        "total_max": discovery + enrichment,
+        "note": "enrichment is a ceiling: cached profiles cost 0",
+    }
 
 
 def _score_rows(conn, rows: list[dict], dossiers: dict[str, dict], cfg: dict, ts: str) -> dict[str, dict]:
@@ -184,8 +254,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             f"export {ENV_KEY}=...  (recipient's own key from https://scrapecreators.com)"
         )
         payload["results"]["api"] = "untested"
-        _emit(payload, args.agent)
-        return 4
+        _emit(payload, args.agent, args)
+        return E_AUTH
     try:
         credits = sources.http.get(
             f"{sources.SC}/v1/credit-balance",
@@ -199,14 +269,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload["results"]["credits_error"] = str(exc)
         payload["results"]["api"] = "auth-failed" if exc.status in {401, 403} else "error"
         payload["results"]["state"] = payload["results"]["api"]
-        _emit(payload, args.agent)
-        return 5
+        _emit(payload, args.agent, args)
+        return E_API
     except Exception as exc:
         payload["results"]["credits_error"] = str(exc)
         payload["results"]["api"] = "error"
         payload["results"]["state"] = "error"
-        _emit(payload, args.agent)
-        return 5
+        _emit(payload, args.agent, args)
+        return E_API
     if getattr(args, "probe", False):
         try:
             hits = sources.youtube(token, "youtube", 3, "month")
@@ -214,10 +284,9 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         except Exception as exc:
             payload["results"]["probe"] = {"ok": False, "error": str(exc)}
             payload["results"]["state"] = "error"
-            _emit(payload, args.agent)
-            return 5
-    _emit(payload, args.agent)
-    return 0
+            _emit(payload, args.agent, args)
+            return E_API
+    return _emit(payload, args.agent, args)
 
 
 def cmd_which(args: argparse.Namespace) -> int:
@@ -236,22 +305,55 @@ def cmd_which(args: argparse.Namespace) -> int:
 
 
 def cmd_find(args: argparse.Namespace) -> int:
-    token = _token()
-    if not token:
-        print(f"missing {ENV_KEY}", file=sys.stderr)
-        return 4
+    dry = bool(getattr(args, "dry_run", False))
+    # Argument validation precedes the auth check on purpose. Both can be wrong
+    # at once, and reporting the missing key first sends the user away to fetch
+    # one only to hit the typo on the next run.
     forced = None if args.scenario in {None, "auto"} else args.scenario
     if forced and forced not in SCENARIOS:
-        print(f"unknown scenario {forced}. want {list(SCENARIOS)}", file=sys.stderr)
-        return 2
-    extra = _parse_sources(args.sources)
+        return _die(args, E_USAGE, f"unknown scenario '{forced}'",
+                    fix=f"drop --scenario to let the engine detect, or pick one of {list(SCENARIOS)}",
+                    allowed=list(SCENARIOS))
+    try:
+        extra = _parse_sources(args.sources)
+    except ValueError as exc:
+        return _die(args, E_USAGE, str(exc), fix=f"pick from {list(SOURCES)}", allowed=list(SOURCES))
+    token = _token()
+    if not token and not dry:
+        return _die(args, E_AUTH, f"missing {ENV_KEY}",
+                    fix=f"export {ENV_KEY}=... — the recipient supplies their own key "
+                        "from https://scrapecreators.com")
     p = make_plan(args.brief, scenario=forced, extra_sources=extra)
     if not p.steps:
-        print("planner produced zero steps", file=sys.stderr)
-        return 2
+        return _die(args, E_USAGE, "planner produced zero steps for this brief",
+                    fix="give a brief with a topic in it, or force one with --scenario")
+
+    depth = max(0, int(args.deep or 0))
+    est = _estimate(p, depth)
+
+    # Cost gates run before the first request, because a budget check that
+    # fires after the spend is just a receipt.
+    cap = getattr(args, "max_credits", None)
+    if cap is not None and est["total_max"] > cap:
+        return _die(
+            args, E_BUDGET,
+            f"plan needs up to {est['total_max']} credits, --max-credits is {cap}",
+            fix=f"raise --max-credits, lower --deep, or narrow --sources",
+            estimate=est, plan=p.as_dict(),
+        )
+    if dry:
+        return _emit(
+            {
+                "meta": {"source": "who-finder", "version": __version__, "dry_run": True,
+                         "scenario": p.scenario, "kind": p.kind, "credits_spent": 0},
+                "plan": p.as_dict(),
+                "table": emit.plan_card(p, est, depth=depth, icp_name=icp.load(args.icp, topic=p.topic).get("name", "generic")),
+                "results": {"estimate": est, "steps": p.as_dict()["steps"]},
+            },
+            args.agent, args,
+        )
 
     entities, hits, errors, source_status = sources.run_plan(token, p, args.limit, args.freshness)
-    depth = max(0, int(args.deep or 0))
     dossiers: dict[str, dict] = {}
     spent = len(p.steps)
 
@@ -345,15 +447,15 @@ def cmd_find(args: argparse.Namespace) -> int:
             "dossiers": full if args.full else {},
         },
     }
-    _emit(payload, args.agent)
-    return 0
+    return _emit(payload, args.agent, args)
 
 
 def cmd_enrich(args: argparse.Namespace) -> int:
     token = _token()
     if not token:
-        print(f"missing {ENV_KEY}", file=sys.stderr)
-        return 4
+        return _die(args, E_AUTH, f"missing {ENV_KEY}",
+                    fix=f"export {ENV_KEY}=... — the recipient supplies their own key "
+                        "from https://scrapecreators.com")
     conn = _db(args)
     ts = db.now()
     try:
@@ -373,8 +475,8 @@ def cmd_enrich(args: argparse.Namespace) -> int:
             for r in targets:
                 r["novelty"] = "new" if r.get("status") == "new" else "known"
         if not targets:
-            print("nothing to enrich", file=sys.stderr)
-            return 3
+            return _die(args, E_NOTFOUND, "nothing to enrich",
+                        fix="run find first, or widen with --status any")
         dossiers, errors, spent = enrich.enrich_many(
             token, targets, limit=args.limit, cache=args.cache
         )
@@ -417,8 +519,7 @@ def cmd_enrich(args: argparse.Namespace) -> int:
             "dossiers": full if args.full else {},
         },
     }
-    _emit(payload, args.agent)
-    return 0
+    return _emit(payload, args.agent, args)
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -484,8 +585,7 @@ def cmd_report(args: argparse.Namespace) -> int:
             "dossiers": full if args.full else {},
         },
     }
-    _emit(payload, args.agent)
-    return 0
+    return _emit(payload, args.agent, args)
 
 
 def cmd_expand(args: argparse.Namespace) -> int:
@@ -504,8 +604,8 @@ def cmd_expand(args: argparse.Namespace) -> int:
         if not d:
             token = _token()
             if not token:
-                print(f"no stored dossier and missing {ENV_KEY}", file=sys.stderr)
-                return 4
+                return _die(args, E_AUTH, f"no stored dossier and missing {ENV_KEY}",
+                            fix=f"export {ENV_KEY}=... or run enrich on this id first")
             row = db.get_entity(conn, kind, platform, handle) or {
                 "kind": kind, "platform": platform, "handle": handle, "name": handle,
             }
@@ -515,8 +615,9 @@ def cmd_expand(args: argparse.Namespace) -> int:
             db.upsert_dossier(conn, d, f, icp.priority(d, f), ts)
         candidates = enrich.similar_identities(d) + enrich.people_identities(d)
         if not candidates:
-            print("no similar profiles or employees in this dossier", file=sys.stderr)
-            return 3
+            return _die(args, E_NOTFOUND,
+                        "no similar profiles or employees in this dossier",
+                        fix="this platform exposes no lateral links; run a fresh find instead")
         for c in candidates:
             c["sample"] = c.get("title") or c.get("sample_title") or ""
             c["sample_url"] = c.get("url")
@@ -542,20 +643,19 @@ def cmd_expand(args: argparse.Namespace) -> int:
         ),
         "results": {"n_new": n_new, "n_known": n_known, "entities": [_compact(r) for r in rows]},
     }
-    _emit(payload, args.agent)
-    return 0
+    return _emit(payload, args.agent, args)
 
 
 def cmd_icp(args: argparse.Namespace) -> int:
     if args.action == "init":
         path = icp.write_template(args.icp)
-        _emit(
+        return _emit(
             {"meta": {"source": "who-finder"}, "results": {"path": str(path), "created": True}},
             args.agent,
+            args,
         )
-        return 0
     cfg = icp.load(args.icp)
-    _emit(
+    return _emit(
         {
             "meta": {"source": "who-finder"},
             "results": {
@@ -565,21 +665,153 @@ def cmd_icp(args: argparse.Namespace) -> int:
             },
         },
         args.agent,
+        args,
     )
-    return 0
+
+
+def cmd_agent_context(args: argparse.Namespace) -> int:
+    """Everything a caller needs to drive this CLI without reading the docs.
+
+    Emitted from the same constants the commands use, so it cannot drift from
+    the real behaviour the way a hand-written command list does.
+    """
+    token = _token()
+    icp_path = icp.config_path(getattr(args, "icp", None))
+    return _emit(
+        {
+            "meta": {"source": "who-finder", "version": __version__},
+            "results": {
+                "version": __version__,
+                "key_present": bool(token),
+                "env": {"key": ENV_KEY, "home": "WHO_FINDER_HOME", "db": "WHO_FINDER_DB",
+                        "icp": "WHO_FINDER_ICP"},
+                "paths": {
+                    "db": str(db.default_db()),
+                    "icp": str(icp_path),
+                    "profiles": str(agentio.profiles_path()),
+                    "feedback": str(agentio.feedback_path()),
+                },
+                "primary_verb": "find",
+                "commands": _command_index(),
+                "scenarios": {n: s["blurb"] for n, s in SCENARIOS.items()},
+                "sources": list(SOURCES),
+                "signals": SIGNALS,
+                "bands": list(icp.BANDS),
+                "statuses": list(db.STATUSES),
+                "exit_codes": agentio.EXIT_CODES,
+                "available_profiles": sorted(agentio.list_profiles()),
+                "global_flags": {
+                    "--agent": "JSON envelope on stdout",
+                    "--select": "comma-separated dotted paths; meta always survives",
+                    "--deliver": "stdout | file:<path> | webhook:<url>",
+                    "--profile": "apply a saved flag set; explicit flags still win",
+                    "--db": "override the roster path",
+                },
+                "cost_model": {
+                    "discovery_per_query_angle": 1,
+                    "enrichment_per_entity": 1,
+                    "cached_profile": 0,
+                    "report_expand_show_export_mark": 0,
+                    "preview": "find <brief> --dry-run --agent",
+                },
+            },
+        },
+        args.agent, args,
+    )
+
+
+def cmd_profile(args: argparse.Namespace) -> int:
+    if args.action == "list":
+        return _emit(
+            {"meta": {"source": "who-finder"}, "results": {"profiles": agentio.list_profiles()}},
+            args.agent, args,
+        )
+    if args.action == "show":
+        if not args.name:
+            return _die(args, E_USAGE, "profile show needs a name", fix="profile list --agent")
+        try:
+            prof = agentio.load_profile(args.name)
+        except KeyError:
+            return _die(args, E_NOTFOUND, f"no profile '{args.name}'", fix="profile list --agent")
+        return _emit(
+            {"meta": {"source": "who-finder"}, "results": {"name": args.name, "flags": prof}},
+            args.agent, args,
+        )
+    if args.action == "delete":
+        if not args.name:
+            return _die(args, E_USAGE, "profile delete needs a name", fix="profile list --agent")
+        gone = agentio.delete_profile(args.name)
+        if not gone:
+            return _die(args, E_NOTFOUND, f"no profile '{args.name}'", fix="profile list --agent")
+        return _emit(
+            {"meta": {"source": "who-finder"}, "results": {"deleted": args.name}}, args.agent, args
+        )
+    # save
+    if not args.name:
+        return _die(args, E_USAGE, "profile save needs a name",
+                    fix='profile save nightly --set scenario=people --set deep=10')
+    flags: dict[str, object] = {}
+    for pair in args.set or []:
+        if "=" not in pair:
+            return _die(args, E_USAGE, f"--set wants key=value, got '{pair}'",
+                        fix="--set deep=10 --set scenario=people")
+        key, _, raw = pair.partition("=")
+        flags[key.strip()] = _coerce(raw.strip())
+    try:
+        saved = agentio.save_profile(args.name, flags)
+    except ValueError as exc:
+        return _die(args, E_USAGE, str(exc), fix="use letters, digits, dot, underscore or hyphen")
+    return _emit(
+        {"meta": {"source": "who-finder"},
+         "results": {"saved": args.name, "flags": saved, "path": str(agentio.profiles_path())}},
+        args.agent, args,
+    )
+
+
+def _coerce(raw: str):
+    low = raw.lower()
+    if low in {"true", "yes", "on"}:
+        return True
+    if low in {"false", "no", "off"}:
+        return False
+    if re.fullmatch(r"-?\d+", raw):
+        return int(raw)
+    return raw
+
+
+def cmd_feedback(args: argparse.Namespace) -> int:
+    words = list(args.words or [])
+    if words[:1] == ["list"]:
+        return _emit(
+            {"meta": {"source": "who-finder"},
+             "results": {"feedback": agentio.read_feedback(args.limit),
+                         "path": str(agentio.feedback_path())}},
+            args.agent, args,
+        )
+    text = " ".join(words).strip()
+    if not text and not sys.stdin.isatty():
+        text = sys.stdin.read().strip()
+    if not text:
+        return _die(args, E_USAGE, "feedback needs a note",
+                    fix='feedback "the compare scenario ranked side b too low"')
+    path = agentio.record_feedback(text, context=args.context or "")
+    return _emit(
+        {"meta": {"source": "who-finder"}, "results": {"recorded": True, "path": str(path)}},
+        args.agent, args,
+    )
 
 
 def cmd_signals(args: argparse.Namespace) -> int:
-    _emit({"meta": {"source": "who-finder"}, "results": {"signals": SIGNALS}}, args.agent)
-    return 0
+    return _emit({"meta": {"source": "who-finder"}, "results": {"signals": SIGNALS}}, args.agent, args)
 
 
 def cmd_search(args: argparse.Namespace) -> int:
     """One raw keyword, one source. Debug hatch — find is the primary verb."""
     token = _token()
     if not token:
-        print(f"missing {ENV_KEY}", file=sys.stderr)
-        return 4
+        return _die(args, E_AUTH, f"missing {ENV_KEY}",
+                    fix=f"export {ENV_KEY}=... — the recipient supplies their own key "
+                        "from https://scrapecreators.com")
     srcs = _parse_sources(args.sources) or ["youtube"]
     scenario = detect_scenario(args.query, None)
     hits, err, _ = sources.search_step(
@@ -618,8 +850,7 @@ def cmd_search(args: argparse.Namespace) -> int:
             "entities": [_compact(r) for r in out],
         },
     }
-    _emit(payload, args.agent)
-    return 0
+    return _emit(payload, args.agent, args)
 
 
 def cmd_new(args: argparse.Namespace) -> int:
@@ -632,8 +863,7 @@ def cmd_new(args: argparse.Namespace) -> int:
             r["novelty"] = "new"
     finally:
         conn.close()
-    _emit({"meta": {"source": "who-finder"}, "results": {"entities": rows}}, args.agent)
-    return 0
+    return _emit({"meta": {"source": "who-finder"}, "results": {"entities": rows}}, args.agent, args)
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -651,8 +881,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             r["novelty"] = "new" if r.get("status") == "new" else "known"
     finally:
         conn.close()
-    _emit({"meta": {"source": "who-finder"}, "results": {"entities": rows}}, args.agent)
-    return 0
+    return _emit({"meta": {"source": "who-finder"}, "results": {"entities": rows}}, args.agent, args)
 
 
 def cmd_show(args: argparse.Namespace) -> int:
@@ -661,8 +890,8 @@ def cmd_show(args: argparse.Namespace) -> int:
     try:
         ent = db.get_entity(conn, kind, platform, handle)
         if not ent:
-            print("not found", file=sys.stderr)
-            return 3
+            return _die(args, E_NOTFOUND, f"{args.identity} is not in the roster",
+                        fix="run list --agent to see stored ids")
         hits = db.hits_for(conn, kind, platform, handle)
         snaps = db.snapshots_for(conn, kind, platform, handle)
         dos = db.get_dossier(conn, kind, platform, handle)
@@ -678,8 +907,7 @@ def cmd_show(args: argparse.Namespace) -> int:
         dos["id"] = f"{kind}/{platform}/{handle}"
         dos["name"] = ent.get("name")
         payload["table"] = emit.dossier_card(dos, ent)
-    _emit(payload, args.agent)
-    return 0
+    return _emit(payload, args.agent, args)
 
 
 def cmd_mark(args: argparse.Namespace) -> int:
@@ -691,13 +919,13 @@ def cmd_mark(args: argparse.Namespace) -> int:
     finally:
         conn.close()
     if not ok:
-        print("not found", file=sys.stderr)
-        return 3
-    _emit(
+        return _die(args, E_NOTFOUND, f"{args.identity} is not in the roster",
+                    fix="run list --agent to see stored ids")
+    return _emit(
         {"meta": {"source": "who-finder"}, "results": {"ok": True, "status": args.status}},
         args.agent,
+        args,
     )
-    return 0
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -714,17 +942,20 @@ def cmd_export(args: argparse.Namespace) -> int:
         text = db.export_csv(rows)
     finally:
         conn.close()
-    if args.out:
-        Path(args.out).write_text(text, encoding="utf-8")
-        if args.agent:
-            json.dump(
-                {"meta": {"source": "who-finder"}, "results": {"path": args.out, "n": len(rows)}},
-                sys.stdout,
-            )
-            sys.stdout.write("\n")
-        else:
-            print(args.out)
-        return 0
+    # CSV is the payload here, not a JSON envelope, so --deliver routes the
+    # sheet itself; --out stays as the plain-file shorthand.
+    sink = args.deliver or (f"file:{args.out}" if args.out else None)
+    if sink:
+        try:
+            note = agentio.deliver(text, sink, content_type="text/csv")
+        except agentio.DeliveryError as exc:
+            return _die(args, agentio.E_DELIVERY, str(exc),
+                        fix="use --out <path> or --deliver file:<path>")
+        return _emit(
+            {"meta": {"source": "who-finder"},
+             "results": {"path": note, "rows": len(rows), "format": "csv"}},
+            args.agent, argparse.Namespace(agent=args.agent, deliver=None, select=args.select),
+        )
     sys.stdout.write(text)
     return 0
 
@@ -738,8 +969,7 @@ def cmd_import(args: argparse.Namespace) -> int:
         conn.commit()
     finally:
         conn.close()
-    _emit({"meta": {"source": "who-finder"}, "results": {"imported": n}}, args.agent)
-    return 0
+    return _emit({"meta": {"source": "who-finder"}, "results": {"imported": n}}, args.agent, args)
 
 
 def cmd_scenarios(args: argparse.Namespace) -> int:
@@ -752,14 +982,50 @@ def cmd_scenarios(args: argparse.Namespace) -> int:
         }
         for name, spec in SCENARIOS.items()
     ]
-    _emit({"meta": {"source": "who-finder"}, "results": {"scenarios": rows}}, args.agent)
-    return 0
+    return _emit({"meta": {"source": "who-finder"}, "results": {"scenarios": rows}}, args.agent, args)
+
+
+GLOBAL_FLAGS = ("agent", "db", "select", "deliver", "profile")
+
+
+def _restore_leading_globals(args: argparse.Namespace, argv: list[str], commands: set[str]) -> None:
+    """Let global flags work before the subcommand as well as after it.
+
+    argparse gives the subparser its own copy of every shared flag, and those
+    defaults overwrite whatever the top level already parsed — so
+    `--profile x find ...` silently loses the profile. Re-reading only the
+    tokens ahead of the subcommand restores them without touching anything the
+    subparser genuinely set.
+    """
+    cut = next((i for i, tok in enumerate(argv) if tok in commands), None)
+    if not cut:
+        return
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--agent", action="store_true")
+    pre.add_argument("--db", default=None)
+    pre.add_argument("--select", default=None)
+    pre.add_argument("--deliver", default=None)
+    pre.add_argument("--profile", default=None)
+    leading, _ = pre.parse_known_args(argv[:cut])
+    for name in GLOBAL_FLAGS:
+        found = getattr(leading, name, None)
+        if found in (None, False):
+            continue
+        if getattr(args, name, None) in (None, False):
+            setattr(args, name, found)
 
 
 def main(argv: list[str] | None = None) -> int:
     shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument("--agent", action="store_true", help="JSON on stdout")
+    shared.add_argument("--agent", action="store_true", help="JSON envelope on stdout")
     shared.add_argument("--db", default=None, help="sqlite path (default: .who-finder/roster.sqlite)")
+    shared.add_argument("--select", default=None, metavar="PATHS",
+                        help="comma-separated dotted paths to keep, e.g. "
+                             "results.entities.id,results.entities.priority")
+    shared.add_argument("--deliver", default=None, metavar="SINK",
+                        help="stdout | file:<path> | webhook:<url>")
+    shared.add_argument("--profile", default=None, metavar="NAME",
+                        help="apply a saved flag set; explicit flags still win")
 
     deep = argparse.ArgumentParser(add_help=False)
     deep.add_argument("--icp", default=None, help="ICP json path (default: .who-finder/icp.json)")
@@ -769,7 +1035,28 @@ def main(argv: list[str] | None = None) -> int:
     deep.add_argument("--full", action="store_true", help="include whole dossiers in --agent JSON")
 
     p = argparse.ArgumentParser(prog="who-finder", description=__doc__, parents=[shared])
+    p.add_argument("--version", action="version", version=f"who-finder {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    ac = sub.add_parser("agent-context", parents=[shared],
+                        help="machine-readable description of this whole CLI")
+    ac.add_argument("--icp", default=None)
+    ac.set_defaults(fn=cmd_agent_context)
+
+    pf = sub.add_parser("profile", parents=[shared], help="save/list/show/delete a flag set")
+    pf.add_argument("action", choices=["save", "list", "show", "delete"])
+    pf.add_argument("name", nargs="?")
+    pf.add_argument("--set", action="append", metavar="KEY=VALUE",
+                    help="repeatable; e.g. --set deep=10 --set scenario=people")
+    pf.set_defaults(fn=cmd_profile)
+
+    fb = sub.add_parser("feedback", parents=[shared], help="record what surprised you")
+    # Free-form words, not a choices= subcommand: `feedback "the note"` is the
+    # common call and argparse would otherwise reject the note as a bad choice.
+    fb.add_argument("words", nargs="*", metavar="list | NOTE")
+    fb.add_argument("--context", default=None, help="the command or brief it happened on")
+    fb.add_argument("--limit", type=int, default=20)
+    fb.set_defaults(fn=cmd_feedback)
 
     d = sub.add_parser("doctor", parents=[shared], help="key, roster path, credits, four-state health")
     d.add_argument("--probe", action="store_true", help="spend 1 credit on a YouTube smoke search")
@@ -795,6 +1082,10 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--new-only", action="store_true")
     f.add_argument("--deep", type=int, default=0, metavar="N",
                    help="enrich the top N (1 credit each) and produce the full brief")
+    f.add_argument("--dry-run", action="store_true",
+                   help="print the exact queries and the credit ceiling, spend nothing")
+    f.add_argument("--max-credits", type=int, default=None, metavar="N",
+                   help="refuse (exit 8) if the plan could cost more than N")
     f.set_defaults(fn=cmd_find)
 
     en = sub.add_parser("enrich", parents=[shared, deep], help="dossier + ICP fit for stored entities")
@@ -866,4 +1157,21 @@ def main(argv: list[str] | None = None) -> int:
     i.set_defaults(fn=cmd_import)
 
     args = p.parse_args(argv)
-    return int(args.fn(args) or 0)
+    _restore_leading_globals(args, argv if argv is not None else sys.argv[1:], set(sub.choices))
+    if getattr(args, "profile", None):
+        try:
+            applied = agentio.apply_profile(args, args.profile)
+        except KeyError:
+            return _die(args, E_NOTFOUND, f"no profile '{args.profile}'",
+                        fix="who-finder profile list --agent")
+        args._profile_applied = applied
+    try:
+        return int(args.fn(args) or 0)
+    except icp.ConfigError as exc:
+        return _die(args, E_CONFIG, str(exc), fix="fix or delete the file, then re-run")
+    except sources.http.HTTPError as exc:
+        code = E_AUTH if exc.status in {401, 403} else E_API
+        return _die(args, code, str(exc),
+                    fix="who-finder doctor --agent" if code == E_AUTH else "retry; if it persists the vendor is down")
+    except BrokenPipeError:
+        return 0
