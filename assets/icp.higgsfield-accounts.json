@@ -1,0 +1,85 @@
+{
+  "name": "higgsfield-accounts",
+
+  "_source": "Score vector from Higgsfield Signal OS (https://higgsfield-signal-os.netlify.app/): Operator +18, AI-video +14, Trigger +14, Workflow +14, Product +14, Buyer +10, Expansion +8, Evidence +8, Friction -14.",
+  "_scope": "Accounts (companies). Pair with icp.higgsfield-operators.json to score the humans inside them.",
+  "_fidelity": "Reproduces the vector's ORDERING, not its 100-point arithmetic. Scores here are not comparable to Signal OS numbers. Sort on `priority`, not `fit`: a credible NA agency of the right size clears the topic gate and saturates fit near 100, so fit separates qualified from unqualified while priority (which folds in reach and novelty) separates the qualified from each other. On the Signal OS sample this reproduces Monks > Jellyfish > Tinuiti > mid-agency > restraint-list logos > competitors > off-target.",
+  "_prime_vs_strong": "The engine cannot split Prime from Strong. That call rests on Signal OS's non-machine-checkable gates — is there a proof artifact we can build before the email, is the trigger still warm, is friction bounded. Treat everything the engine bands `strong` as the Strong pool and promote to Prime by hand.",
+  "_not_expressible": "Signal OS gates on five things: operator exists, product wedge obvious, live reason still warm, proof artifact makeable, friction bounded. Only the topic gate below is machine-checkable. Wedge routing, proof artifacts and true friction remain human judgement — the engine cannot invent them and should not pretend to.",
+
+  "_must_any": "Signal OS universe gate: agencies, brands, retailers and apps with a visible content surface.",
+  "must_any": [
+    "ai video",
+    "generative",
+    "creative",
+    "advertising",
+    "campaign",
+    "content",
+    "video",
+    "marketing",
+    "commerce",
+    "brand"
+  ],
+
+  "_boost": "AI-video, Workflow, Product-wedge and Expansion dimensions. Weights are deliberately small because agencies legitimately match many of these at once; the +30 cap would otherwise peg every credible account at 100 and destroy the band's meaning.",
+  "boost": {
+    "ai video": 7,
+    "generative": 5,
+    "ai studio": 6,
+    "creative technology": 4,
+    "performance marketing": 4,
+    "paid social": 3,
+    "ugc": 4,
+    "product demo": 3,
+    "virtual try-on": 3,
+    "retail media": 3,
+    "workflow": 4,
+    "automation": 4,
+    "orchestration": 3,
+    "pipeline": 3,
+    "creative operations": 5,
+    "content at scale": 5,
+    "agency": 3,
+    "studio": 3
+  },
+
+  "_penalty": "Friction dimension, plus the categories where a cold AI-video pitch does not land.",
+  "penalty": {
+    "holding company": -10,
+    "procurement": -6,
+    "government": -12,
+    "public sector": -10,
+    "pharmaceutical": -10,
+    "healthcare provider": -8,
+    "regulated": -6,
+    "staffing": -8,
+    "recruitment": -8,
+    "text-to-video platform": -12,
+    "video generation platform": -12
+  },
+
+  "_audience": "Employee count. Signal OS's Prime tier is mid-to-large agencies (roughly 200-20k). Useful side effect: 50k+ enterprises land outside the band and score lower, matching Signal OS's own restraint list of big logos it declines to over-personalize. Weight is held down to leave headroom above the +40 base and +18 topic gate.",
+  "audience": {
+    "min": 20,
+    "sweet_min": 200,
+    "sweet_max": 20000,
+    "weight": 12
+  },
+
+  "_geo": "Signal OS universe is North-America-reachable. Low weight — being in NA is table stakes here, not a differentiator.",
+  "geo": {
+    "prefer": ["united states", "canada"],
+    "weight": 5
+  },
+
+  "_signals": "Closest public proxies for Trigger, Buyer and Evidence. Hiring for creative/AI roles is the strongest observable sign that an operator exists and has budget. `enterprise` is negative on purpose: Signal OS keeps a restraint list of huge logos whose cold path is too slow for first-wave personalization, and without this they outrank the agencies that actually convert.",
+  "signals": {
+    "hiring": 12,
+    "recent-round": 10,
+    "funded": 6,
+    "posting": 6,
+    "midmarket": 8,
+    "enterprise": -8,
+    "smb": -6
+  }
+}

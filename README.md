@@ -84,6 +84,15 @@ python3 scripts/who_finder.py signals       # signal names you can score
 
 If results feel off, edit this file. That is the intended control surface — the scoring stays inspectable instead of drifting into model taste.
 
+Two worked examples ship in `assets/`, ported from a real GTM rubric: [`icp.higgsfield-accounts.json`](assets/icp.higgsfield-accounts.json) scores companies on headcount, category and friction, and [`icp.higgsfield-operators.json`](assets/icp.higgsfield-operators.json) scores the people inside them on title and function. Use them as a starting shape:
+
+```bash
+python3 scripts/who_finder.py find "NA agencies scaling AI video" \
+  --deep 10 --icp assets/icp.higgsfield-accounts.json
+```
+
+[reference/icp.md](reference/icp.md) walks through what does and does not survive that kind of translation.
+
 ## CLI
 
 ```bash

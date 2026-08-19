@@ -79,6 +79,20 @@ priority = 0.60 × fit + 0.25 × reach + 8 if new − 6 if unknown
 
 Entities with no follower count (Google-indexed rows) fall back to a damped engagement proxy so they are not automatically last.
 
+## Worked example: porting an existing rubric
+
+`assets/icp.higgsfield-accounts.json` and `assets/icp.higgsfield-operators.json` translate a real GTM scoring vector (Higgsfield Signal OS: Operator +18, AI-video +14, Trigger +14, Workflow +14, Product +14, Buyer +10, Expansion +8, Evidence +8, Friction −14) into this schema. Four things that port badly, and are worth knowing before you translate your own:
+
+**Arithmetic does not survive; ordering does.** Boost caps at +30 and penalty floors at −30, so a source rubric scored out of 100 will not reproduce its numbers here. Check that the *rank* matches on accounts you already know, and ignore absolute values.
+
+**Split the rubric by entity kind.** One `audience` block cannot serve both followers and employees. An account-centric rubric needs two files — one scoring companies on headcount, one scoring the operators inside them on followers — which also mirrors how "operator before logo" rubrics actually work.
+
+**Watch the base.** Score starts at 40 and a passed topic gate adds 18. Give `audience` and `geo` large weights on top of that and every qualified row pegs at 100, which makes the band useless. Keep table-stakes dimensions cheap and spend your weight on what discriminates.
+
+**Encode the exclusions, not just the targets.** The Signal OS port sets `enterprise: -8` because its restraint list deliberately deprioritises huge logos whose cold path is slow. Without that line the 90k-employee brands outrank the mid-size agencies that actually convert — the rubric's most important judgement, and the easiest one to drop on the floor.
+
+Two dimensions did not port at all: whether a proof artifact can be built before the first email, and whether friction (procurement, legal, likeness, taste) is bounded. Neither is visible in a public profile. Those stay human, and the config says so.
+
 ## When the results feel wrong
 
 Editing `icp.json` is the fix. Tell the user that. Re-ranking in prose is not — it throws away the attribution that makes the number trustworthy.

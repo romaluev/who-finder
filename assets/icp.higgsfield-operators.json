@@ -1,0 +1,82 @@
+{
+  "name": "higgsfield-operators",
+
+  "_source": "Operator (+18) and Buyer-map (+10) dimensions from Higgsfield Signal OS (https://higgsfield-signal-os.netlify.app/).",
+  "_scope": "People. Signal OS's first principle is 'operator before logo' — a famous account with no AI/creative/growth owner is not a Prime target. This config scores the owner.",
+  "_use": "Run after an account clears icp.higgsfield-accounts.json, or straight at a role: find \"heads of creative operations at NA agencies\" --deep 10 --icp assets/icp.higgsfield-operators.json",
+  "_fidelity": "Ordering, not Signal OS arithmetic. Boost saturates at +30.",
+
+  "_must_any": "The person must sit near content, video or creative work. Without this gate a senior title alone would rank.",
+  "must_any": [
+    "ai video",
+    "generative",
+    "creative",
+    "content",
+    "video",
+    "advertising",
+    "campaign",
+    "brand",
+    "ugc",
+    "social"
+  ],
+
+  "_boost": "Operator seniority and function. Titles usually arrive via the Google snippet, since LinkedIn hides job history on public profiles.",
+  "boost": {
+    "chief creative": 14,
+    "executive creative director": 14,
+    "head of creative": 14,
+    "head of content": 14,
+    "ai transformation": 14,
+    "creative operations": 13,
+    "creative ops": 13,
+    "cmo": 13,
+    "head of production": 12,
+    "creative director": 12,
+    "head of growth": 12,
+    "head of social": 11,
+    "head of brand": 11,
+    "performance creative": 11,
+    "creative technologist": 10,
+    "founder": 10,
+    "co-founder": 10,
+    "head of": 9,
+    "vp ": 8,
+    "director": 7,
+    "paid social": 7,
+    "producer": 6
+  },
+
+  "_penalty": "People who cannot buy or pilot anything.",
+  "penalty": {
+    "student": -20,
+    "intern": -16,
+    "aspiring": -12,
+    "looking for work": -12,
+    "open to work": -10,
+    "seeking opportunities": -10,
+    "job seeker": -12,
+    "coach": -6
+  },
+
+  "_audience": "Followers. Operators are not influencers — a 2k-follower Head of Creative Ops is an excellent target — so the band is wide and the weight is deliberately lower than the account config.",
+  "audience": {
+    "min": 300,
+    "sweet_min": 2000,
+    "sweet_max": 500000,
+    "weight": 14
+  },
+
+  "geo": {
+    "prefer": ["united states", "canada"],
+    "weight": 8
+  },
+
+  "_signals": "`hiring` on a person usually means they are building a team, which is both a catalyst and evidence of budget.",
+  "signals": {
+    "hiring": 12,
+    "posting": 6,
+    "verified": 3,
+    "mid-audience": 4,
+    "large-audience": 4
+  }
+}
