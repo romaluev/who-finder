@@ -1,9 +1,9 @@
 ---
 name: who-finder
-description: Deep public research on people or companies by scenario (operators, firms, creators, hiring, press, A vs B). Plans the queries, fetches public profiles, scores ICP fit with attributed reasons, ranks by priority, and keeps a seen-list so outreach only gets new names. Use when asked to find people, find companies, find creators, research a market, build a shortlist, qualify leads, see who is hiring, find journalists covering a topic, compare two scenes, search LinkedIn public profiles, find YouTube or TikTok talent, or export a prospect handoff CSV. Also use for "who should we pitch", "who is doing X", "give me names", "find me operators at", "who covers this beat". Not for sending email or DMs, not for logged-in LinkedIn or Sales Navigator scraping, not for CRM writes, and not for researching a topic with no people in it — that is last30days.
+description: One tool with three commands — find people or companies by keywords, rate a CSV or Clay export, or run find-then-rate as one report. Deep public research by scenario (operators, firms, creators, hiring, press, A vs B), scores who is worth buying, and never invents a name or a price. Use when asked to find people, find companies, find creators, rate creators, score a list, price a creator, research a market, build a shortlist, qualify leads, see who is hiring, find journalists, compare two scenes, or "do the whole thing". Not for sending email or DMs, not for logged-in LinkedIn, not for CRM writes, and not for researching a topic with no people in it — that is last30days.
 license: Apache-2.0
 metadata:
-  version: "3.6.0"
+  version: "4.0.0"
 ---
 
 # SKILL CONTRACT — READ BEFORE ANY TOOL CALL
@@ -12,7 +12,7 @@ You are inside the `who-finder` skill. This is a specific research engine with a
 
 **The engine is `scripts/who_finder.py`.** It detects the scenario, plans the query angles, searches public sources (DuckDuckGo always; Brave and ScrapeCreators when keys are present), optionally fetches public profiles, scores ICP fit with attributed arithmetic, ranks by priority, de-dupes against a local roster, and renders the report. Every one of those steps lives in Python **specifically so you cannot improvise it**. A missing ScrapeCreators key is a thinner run, not a reason to invent names.
 
-What you do: parse intent into one `find` call, run it, paste the `table`, add at most three sentences of your own.
+What you do: parse intent into **one** command — `find`, `rate`, or `run` — then paste `table`, then at most three sentences of your own.
 
 What you never do: search for names yourself, write HTTP, invent a ranking, judge fit in prose, or design a report format.
 
@@ -90,7 +90,13 @@ Skip `doctor` only if a previous call in *this* session already returned `ready`
 
 ---
 
-# STEP 1 — PARSE INTENT INTO ONE `find`
+# STEP 1 — PARSE INTENT INTO ONE COMMAND
+
+| the user says | you run |
+|---|---|
+| "find people / companies / creators for X" | `find "X" --deep 10 --agent` |
+| "rate this CSV / Clay export / list" | `rate PATH --agent` |
+| "do the whole thing / find and rate / full flow" | `run "X" --agent` |
 
 Do not ask clarifying questions you can answer from the brief. The engine detects the scenario; your job is to pass the brief through cleanly.
 
@@ -426,7 +432,7 @@ Each of these is a specific way this output goes wrong. Recognise the shape in y
 
 # COMPOSE — OTHER SKILLS, NOT A SOUP
 
-This engine stays public-data and clone-and-run. Two other tools sit next to it; you run them *as themselves* when the user asks for what they do.
+Rating lives in this same CLI (`rate` / `run`). Do not load a `creator-rating` or `creator-finder` skill — those folders are dead. Two *other* tools sit next to this one:
 
 | they ask | you run | never |
 |---|---|---|
@@ -453,6 +459,7 @@ One level deep, load only what the run needs.
 | [docs/start.md](docs/start.md) | they just cloned — point them here, do not improvise setup |
 | [docs/ask.md](docs/ask.md) | what a non-technical user types |
 | [docs/key.md](docs/key.md) | key missing, expired, or "it worked yesterday" |
+| [docs/economy.md](docs/economy.md) | Clay first, paid scrapers last |
 | [reference/cli.md](reference/cli.md) | every flag, envelope, sink, profile, exit code |
 | [reference/scenarios.md](reference/scenarios.md) | how detection works and what each scenario plans |
 | [reference/people.md](reference/people.md) · [reference/companies.md](reference/companies.md) · [reference/creators.md](reference/creators.md) | per-scenario angles and pitfalls |

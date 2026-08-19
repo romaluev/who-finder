@@ -1,4 +1,5 @@
 .who-finder/
+.creator-rating/
 __pycache__/
 .pytest_cache/
 *.pyc

@@ -1,9 +1,4 @@
-"""HTTP GET. JSON for APIs; text for the keyless HTML floor.
-
-Retry lives here so every caller gets the same 429/5xx policy: try once more,
-then raise. The search waterfall decides whether to fall through to another
-backend; this module only knows how to fetch.
-"""
+"""HTTP GET/POST. JSON for APIs. Retry lives here so every collector shares it."""
 
 from __future__ import annotations
 
@@ -15,7 +10,7 @@ import urllib.request
 from typing import Any
 
 RETRYABLE = frozenset({429, 500, 502, 503, 504})
-UA = "Mozilla/5.0 (compatible; who-finder/4.0; +https://github.com/romaluev/who-finder)"
+UA = "Mozilla/5.0 (compatible; creator-rating/1.0; +https://github.com/romaluev/creator-rating)"
 
 
 class HTTPError(RuntimeError):
@@ -33,11 +28,11 @@ def _url(url: str, params: dict[str, Any] | None) -> str:
     return url + ("&" if "?" in url else "?") + qs
 
 
-def _fetch(url: str, headers: dict[str, str] | None, timeout: int) -> str:
+def _fetch(url: str, headers: dict[str, str] | None, timeout: int, data: bytes | None = None) -> str:
     hdrs = {"User-Agent": UA, "Accept": "*/*"}
     if headers:
         hdrs.update(headers)
-    req = urllib.request.Request(url, headers=hdrs, method="GET")
+    req = urllib.request.Request(url, headers=hdrs, data=data, method="POST" if data else "GET")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8", errors="replace")
@@ -59,6 +54,21 @@ def _with_retry(fn, retries: int = 1):
     raise last  # pragma: no cover
 
 
+def get_text(
+    url: str,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: int = 30,
+    retries: int = 1,
+) -> str:
+    """HTML / XML / plain text. Same retry policy as get()."""
+    target = _url(url, params)
+    hdrs = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+    if headers:
+        hdrs.update(headers)
+    return _with_retry(lambda: _fetch(target, hdrs, timeout), retries=retries)
+
+
 def get(
     url: str,
     params: dict[str, Any] | None = None,
@@ -67,9 +77,12 @@ def get(
     retries: int = 1,
 ) -> dict[str, Any]:
     target = _url(url, params)
+    hdrs = {"Accept": "application/json"}
+    if headers:
+        hdrs.update(headers)
 
     def once() -> dict[str, Any]:
-        raw = _fetch(target, headers, timeout)
+        raw = _fetch(target, hdrs, timeout)
         if not raw.strip():
             return {}
         data = json.loads(raw)
@@ -78,16 +91,23 @@ def get(
     return _with_retry(once, retries=retries)
 
 
-def get_text(
+def post(
     url: str,
-    params: dict[str, Any] | None = None,
+    payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
-    timeout: int = 30,
+    timeout: int = 45,
     retries: int = 1,
-) -> str:
-    target = _url(url, params)
-    return _with_retry(lambda: _fetch(target, headers, timeout), retries=retries)
+) -> dict[str, Any]:
+    body = json.dumps(payload or {}).encode("utf-8")
+    hdrs = {"Content-Type": "application/json"}
+    if headers:
+        hdrs.update(headers)
 
+    def once() -> dict[str, Any]:
+        raw = _fetch(url, hdrs, timeout, data=body)
+        if not raw.strip():
+            return {}
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {"data": data}
 
-def sc_headers(token: str) -> dict[str, str]:
-    return {"x-api-key": token, "Accept": "application/json"}
+    return _with_retry(once, retries=retries)

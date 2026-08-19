@@ -1,10 +1,10 @@
 # What to ask
 
-Once the skill is installed and `doctor` says READY, you do not learn commands. You type a sentence.
+Once the folder is installed you type a sentence. You do not learn flags.
 
-## The useful ones
+## Find
 
-> Find me the top 10 people building AI video tools and write it up as a PDF.
+> Find me 10 people making AI video ads.
 
 > Who's hiring for AI video editors?
 
@@ -12,24 +12,23 @@ Once the skill is installed and `doctor` says READY, you do not learn commands. 
 
 > Journalists covering synthetic media.
 
-> Show me ten more.
+## Rate
 
-> What's their email? Only what they published.
+> Rate this Clay export and write it up as a PDF.
 
-> These aren't our kind of customer — score against operators, not agencies.
+> Rate names.csv. Don't invent a price if we have no posts.
+
+## Full flow
+
+> Find CMOs in AI video and tell me who to buy.
+
+> Do the whole thing for “founders of AI video tools”.
 
 ## What you get back
 
-A document, not a list of links: a summary of the landscape, then a page on each person — who they are, how to reach them (only addresses they published), what you'd miss on a first scan, and why they scored where they did.
+A shortlist or a document — who they are, why they ranked, what was measured vs guessed. If the assistant lists names it did not get from the tool, ask it to run who-finder.
 
-If the assistant pastes a wall of names it did not run through the tool, ask it to run who-finder. Made-up titles and inboxes are the failure this exists to prevent.
+## What not to ask
 
-## Cost, in one sentence
-
-Say *"don't spend much"* or *"preview it first"* and it will dry-run. A normal top-10 writeup is about 15 credits.
-
-## What not to ask it
-
-- "Email them for me" — it finds, it does not send.
-- "What's the internet saying about this topic?" — that is [last30days](https://github.com/mvanhorn/last30days-skill), not this.
-- "Guess Jane's work email" — it will refuse. Public addresses only, unless you have contact-goat installed and you agree to spend.
+- “Email them for me” — it finds, it does not send.
+- “Guess Jane's work email” — it will refuse.

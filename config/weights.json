@@ -1,0 +1,102 @@
+{
+  "awareness+leads": {
+    "social": {
+      "icp_share_engagers": 14,
+      "director_plus_share": 6,
+      "enterprise_share": 5,
+      "target_account_hits": 5,
+      "icp_share_seed_pool": 5,
+      "geo_fit_share": 3,
+      "followers": 2
+    },
+    "engagement": {
+      "median_impressions_est": 12,
+      "authenticity": 12,
+      "eng_per_1k_followers": 4,
+      "comment_depth": 3,
+      "posts_per_week": 2,
+      "trend_90d": 2
+    },
+    "interest": {
+      "brand_topic_fit": 12,
+      "topic_concentration": 5,
+      "audience_interest_alignment": 5,
+      "headline_alignment": 3
+    }
+  },
+  "awareness": {
+    "social": {
+      "icp_share_engagers": 10,
+      "director_plus_share": 4,
+      "enterprise_share": 3,
+      "target_account_hits": 3,
+      "icp_share_seed_pool": 3,
+      "geo_fit_share": 3,
+      "followers": 4
+    },
+    "engagement": {
+      "median_impressions_est": 20,
+      "authenticity": 12,
+      "eng_per_1k_followers": 5,
+      "comment_depth": 2,
+      "posts_per_week": 3,
+      "trend_90d": 3
+    },
+    "interest": {
+      "brand_topic_fit": 10,
+      "topic_concentration": 5,
+      "audience_interest_alignment": 4,
+      "headline_alignment": 3
+    }
+  },
+  "leads": {
+    "social": {
+      "icp_share_engagers": 18,
+      "director_plus_share": 8,
+      "enterprise_share": 5,
+      "target_account_hits": 8,
+      "icp_share_seed_pool": 8,
+      "geo_fit_share": 3,
+      "followers": 1
+    },
+    "engagement": {
+      "median_impressions_est": 6,
+      "authenticity": 10,
+      "eng_per_1k_followers": 3,
+      "comment_depth": 6,
+      "posts_per_week": 2,
+      "trend_90d": 2
+    },
+    "interest": {
+      "brand_topic_fit": 10,
+      "topic_concentration": 4,
+      "audience_interest_alignment": 5,
+      "headline_alignment": 3
+    }
+  },
+  "ad-whitelisting": {
+    "social": {
+      "icp_share_engagers": 10,
+      "director_plus_share": 4,
+      "enterprise_share": 4,
+      "target_account_hits": 4,
+      "icp_share_seed_pool": 3,
+      "geo_fit_share": 3,
+      "followers": 2
+    },
+    "engagement": {
+      "median_impressions_est": 5,
+      "authenticity": 14,
+      "eng_per_1k_followers": 4,
+      "comment_depth": 3,
+      "posts_per_week": 2,
+      "trend_90d": 2
+    },
+    "interest": {
+      "brand_topic_fit": 15,
+      "topic_concentration": 6,
+      "audience_interest_alignment": 4,
+      "headline_alignment": 4
+    }
+  }
+}

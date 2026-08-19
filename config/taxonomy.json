@@ -1,0 +1,19 @@
+{
+  "topics": {
+    "AI video": ["ai video", "text-to-video", "generative video", "synthetic video", "video generation"],
+    "Generative creative": ["generative", "gen ai", "ai creative", "ai art", "midjourney", "flux"],
+    "Ad creative": ["ad creative", "ugc ad", "performance creative", "ad format", "paid social"],
+    "Brand content": ["brand content", "brand film", "brand storytelling", "brand campaign"],
+    "Creative production": ["production", "studio", "shoot", "post-production", "editor"],
+    "Marketing strategy": ["go-to-market", "gtm", "positioning", "marketing strategy"],
+    "Growth": ["growth", "plg", "acquisition", "retention", "activation"],
+    "Demand gen": ["demand gen", "demand generation", "pipeline", "mql", "sql"],
+    "LinkedIn advice": ["linkedin algorithm", "linkedin growth", "personal brand", "creator economy"],
+    "Leadership": ["leadership", "ceo", "founder lesson", "culture"],
+    "Other": []
+  },
+  "brief_terms": [
+    "ai video", "generative video", "text-to-video", "ad creative",
+    "ugc", "brand content", "creative production", "video ads"
+  ]
+}

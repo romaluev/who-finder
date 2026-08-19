@@ -1,0 +1,21 @@
+{
+  "name": "marketing-buyers",
+  "brief": "AI video generation for marketing teams, creative production, ad creative, brand content",
+  "seniority_director_plus": ["Director", "VP", "C-level", "Founder/Owner"],
+  "functions": [
+    "Marketing", "Growth", "Brand", "Content", "Demand Gen", "CMO",
+    "Creative", "Digital", "Performance"
+  ],
+  "title_contains": [
+    "CMO", "VP Marketing", "Head of Marketing", "Brand Director",
+    "Growth", "Demand Generation", "Content Director", "Creative Director",
+    "Performance Marketing", "Marketing Operations"
+  ],
+  "enterprise_min": 1000,
+  "agency_titles": ["Founder", "CEO", "Managing Director", "Partner"],
+  "geo": ["US", "USA", "United States", "UK", "United Kingdom", "DE", "Germany",
+          "FR", "France", "NL", "Netherlands", "Nordics", "SE", "NO", "DK", "FI",
+          "CA", "Canada"],
+  "campaign_languages": ["en"],
+  "competitors": ["runway", "pika", "luma", "sora", "synthesia", "heygen", "invideo"]
+}

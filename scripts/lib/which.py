@@ -54,6 +54,19 @@ INDEX = (
         "note": "dotted paths, element-wise over lists; meta and error always survive",
     },
     {
+        "needles": ("rate these", "score this list", "score these creators",
+                    "clay export", "what should we pay", "price these",
+                    "rate this"),
+        "run": "rate PATH --out rating",
+        "note": "one file: a CSV, a Clay export, or the JSON from find",
+    },
+    {
+        "needles": ("full flow", "end to end", "find and rate", "do the whole",
+                    "who to buy", "tell me who to buy"),
+        "run": 'run "BRIEF"',
+        "note": "find then rate. writes one report",
+    },
+    {
         "needles": ("report", "pdf", "document", "write it up", "writeup", "share with",
                     "send to", "forward", "deck", "one pager", "markdown file", "html"),
         "run": 'find "BRIEF" --deep 10 --format md,pdf --out ~/Desktop/shortlist --agent',

@@ -1,98 +1,95 @@
-# Start — clone it, then ask
+# Start — one folder, three commands
 
-You need a Mac or Linux machine and ten minutes. No `pip`, no install, no programming. A key from [scrapecreators.com](https://scrapecreators.com) is optional — without it you still get a thinner shortlist from public search.
-
-There are two ways in. Pick one.
+You need a Mac. Ten minutes. No programming.
 
 ---
 
-## A. You use Cursor or Claude (the usual way)
+## 1. Put the folder on your machine
 
-After this, you never type a command. You just ask.
-
-**1. Put the skill where your assistant looks.**
-
-Cursor:
+**Cursor / Claude** (then you only talk, you do not type commands):
 
 ```bash
 git clone https://github.com/romaluev/who-finder ~/.cursor/skills/who-finder
 ```
 
-Claude:
-
-```bash
-git clone https://github.com/romaluev/who-finder ~/.claude/skills/who-finder
-```
-
-**2. Try it with nothing installed.**
-
-```bash
-# Cursor
-python3 ~/.cursor/skills/who-finder/scripts/who_finder.py find "founders of AI video tools" --deep 10
-```
-
-That works with no key. It is public search only — no profile pages fetched, fit capped at MAYBE. `doctor` will say **READY** on the thinner path.
-
-**3. (Optional) Save a key for full profiles.**
-
-Get one at [scrapecreators.com](https://scrapecreators.com). Everyone uses their own — do not reuse a teammate's. Then:
-
-```bash
-python3 ~/.cursor/skills/who-finder/scripts/who_finder.py setup YOUR_KEY
-```
-
-You should see `Key saved`. Open a **new** terminal and run `doctor` — it should say **READY** (full). If it still says the thinner path, the key did not stick — see [Your key](key.md).
-
-Optional, free-tier web search that spends no ScrapeCreators credits:
-
-```bash
-python3 ~/.cursor/skills/who-finder/scripts/who_finder.py setup --brave YOUR_BRAVE_KEY
-```
-
-**4. Ask, in plain English.**
-
-> Find me the top 10 people building AI video tools and write it up as a PDF.
-
-That is the whole job. More things to say: [What to ask](ask.md).
-
----
-
-## B. You just want the folder (no assistant)
+**Just the folder:**
 
 ```bash
 git clone https://github.com/romaluev/who-finder
 cd who-finder
-./who-finder find "founders of AI video tools" --deep 10
 ```
 
-No setup required. See the exact searches and cost (often $0) before a paid run:
-
-```bash
-./who-finder find "founders of AI video tools" --deep 10 --dry-run
-```
-
-Then, if you want full profiles:
-
-```bash
-./who-finder setup YOUR_KEY
-./who-finder doctor
-./who-finder find "founders of AI video tools" --deep 10 --format md,html --out ~/Desktop/shortlist
-```
-
-Open `~/Desktop/shortlist.html` in a browser. Print to PDF if you want the pretty version.
+If someone handed you a zip, unzip it and `cd` into `who-finder`. Same thing.
 
 ---
 
-## If something looks wrong
+## 2. Check it is alive
 
-| you see | it means | do this |
-|---|---|---|
-| `READY` (full) | ScrapeCreators works | ask, or run `find --deep` |
-| `READY` (thinner path) | no paid key; public search still runs | run `find` anyway, or [add a key](key.md) for profiles |
-| `KEY REJECTED` | the paid key is wrong; thin path still works | get a new key, `setup` again, or run thin |
-| `command not found: python3` | Python is missing | Macs have it. On Linux: install Python 3.9+ |
-| `./who-finder: Permission denied` | the file is not executable | `chmod +x who-finder` |
+```bash
+./who-finder doctor
+```
 
-A typical *full* shortlist costs about **15 credits** (a handful of searches + 10 profiles). A thin run is **$0**. `--dry-run` shows the number before you agree. `--cheap` keeps one framing and saves paid credits for profile enrich.
+It should say **READY**. If it says “thinner path”, that is still READY — you can find people without a paid key.
 
-It never sends email, never logs into LinkedIn, and never invents a name or an inbox.
+---
+
+## 3. The three commands
+
+### Find people or companies
+
+```bash
+./who-finder find "CMO AI video ads"
+```
+
+Swap the words for whoever you want: founders, agencies, YouTubers, journalists, companies.
+
+```bash
+./who-finder find "agencies making AI video ads"
+./who-finder find "who is hiring AI video editors"
+```
+
+To save a document:
+
+```bash
+./who-finder find "CMO AI video ads" --format html --out ~/Desktop/found
+```
+
+Open `found.html`.
+
+### Rate a list
+
+A sheet with names and LinkedIn (or YouTube) URLs. A Clay export is fine.
+
+```bash
+./who-finder rate ~/Desktop/names.csv
+```
+
+Writes `rating.html`, `rating.md`, and `rating.pdf` in the folder you are in. Open the HTML.
+
+If you have no sheet, try the sample:
+
+```bash
+./who-finder rate tests/fixtures/creators.csv
+```
+
+That sample has no post history, so it will not invent a price. That is correct.
+
+### Full flow — find, then rate, one report
+
+```bash
+./who-finder run "CMO AI video ads"
+```
+
+One command. Writes `run.html` (and md/pdf). That is the e2e path.
+
+---
+
+## Optional later
+
+- **Clay export** — `./who-finder rate ~/Downloads/clay-export.csv` (no Clay API key).
+- **Full LinkedIn / YouTube profiles** — a key from scrapecreators.com, then `./who-finder setup YOUR_KEY`.
+- **Do not spend** — add `--cheap` on `find` or `run`.
+
+You do not need any of that for the first test.
+
+More sentences to ask the assistant: [What to ask](ask.md).

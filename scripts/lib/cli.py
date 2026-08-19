@@ -20,6 +20,7 @@ import json
 import os
 import re
 import pathlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -81,7 +82,9 @@ SIGNALS = {
 
 
 COMMAND_HELP = {
-    "find": ("detect scenario, plan queries, search, ingest, rank", "1/angle + 1/enriched"),
+    "find": ("search for people or companies by keywords", "0 public; 1/angle if keyed"),
+    "rate": ("score and price a list (CSV, Clay export, or find JSON)", "0"),
+    "run": ("find, then rate — one report", "0 public; same as find if keyed"),
     "report": ("re-render from the roster; --format writes md/html/pdf/json files", "0"),
     "more": ("the next --limit down the ranking, enriched; no new search",
              "1/new profile, 0 discovery"),
@@ -457,6 +460,78 @@ def cmd_which(args: argparse.Namespace) -> int:
     }
     _emit(payload, args.agent, args)
     return 0 if hit.get("matched") else 2
+
+
+def _prepare_rating_env() -> None:
+    """One home directory for find + rate. The Lead should not manage two stores."""
+    if not os.environ.get("CREATOR_RATING_HOME"):
+        os.environ["CREATOR_RATING_HOME"] = str(db.home())
+
+
+def _rating_main(argv: list[str]) -> int:
+    _prepare_rating_env()
+    from rating.cli import main as rating_main
+    return int(rating_main(argv) or 0)
+
+
+def cmd_rate(args: argparse.Namespace) -> int:
+    """Score a list. One file in, one document out."""
+    src = getattr(args, "source", None)
+    if not src:
+        return _die(args, E_USAGE, "rate needs a file — a CSV, a Clay export, or the JSON from find",
+                    fix='who-finder rate names.csv --out rating')
+    path = Path(src).expanduser()
+    if not path.exists():
+        return _die(args, E_NOTFOUND, f"no file at {path}",
+                    fix="pass a CSV or the JSON find wrote")
+    fmt = getattr(args, "format", None) or "md,html,pdf"
+    out = getattr(args, "out", None) or "rating"
+    argv = ["rate", "--format", fmt, "--out", out]
+    if getattr(args, "agent", False):
+        argv.append("--agent")
+    if getattr(args, "preset", None):
+        argv += ["--preset", args.preset]
+    if path.suffix.lower() == ".json":
+        argv += ["--who-finder", str(path)]
+    else:
+        argv += ["--csv", str(path)]
+    return _rating_main(argv)
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Find, then rate. One brief in, one document out."""
+    brief = (getattr(args, "brief", None) or "").strip()
+    if not brief:
+        return _die(args, E_USAGE, "run needs keywords — who you are looking for",
+                    fix='who-finder run "CMO AI video ads"')
+    _prepare_rating_env()
+    found = db.home() / "last-find.json"
+    found.parent.mkdir(parents=True, exist_ok=True)
+    deep = int(getattr(args, "deep", 0) or 10)
+    script = Path(__file__).resolve().parents[1] / "who_finder.py"
+    cmd = [
+        sys.executable, str(script), "find", brief,
+        "--deep", str(deep), "--agent", "--deliver", f"file:{found}",
+    ]
+    if getattr(args, "scenario", None) and args.scenario not in {None, "auto"}:
+        cmd += ["--scenario", args.scenario]
+    if getattr(args, "cheap", False):
+        cmd.append("--cheap")
+    if getattr(args, "db", None):
+        cmd += ["--db", args.db]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        if getattr(args, "agent", False) and proc.stdout:
+            sys.stdout.write(proc.stdout)
+        else:
+            sys.stderr.write(proc.stderr or proc.stdout or "")
+        return int(proc.returncode)
+    fmt = getattr(args, "format", None) or "md,html,pdf"
+    out = getattr(args, "out", None) or "run"
+    argv = ["rate", "--who-finder", str(found), "--format", fmt, "--out", out]
+    if getattr(args, "agent", False):
+        argv.append("--agent")
+    return _rating_main(argv)
 
 
 def cmd_find(args: argparse.Namespace) -> int:
@@ -1580,7 +1655,7 @@ def main(argv: list[str] | None = None) -> int:
     sg = sub.add_parser("signals", parents=[shared], help="signal names you can score in icp.json")
     sg.set_defaults(fn=cmd_signals)
 
-    f = sub.add_parser("find", parents=[shared, deep], help="detect scenario, plan queries, search, ingest")
+    f = sub.add_parser("find", parents=[shared, deep], help="search for people or companies by keywords")
     f.add_argument("brief")
     f.add_argument("--scenario", default="auto", help="auto|people|companies|creators|hiring|press|compare")
     f.add_argument("--sources", default=None, help="comma list; default is the scenario's set")
@@ -1597,6 +1672,22 @@ def main(argv: list[str] | None = None) -> int:
                    help=f"text (default) or a file report: {', '.join(report.FORMATS)} (comma-separated)")
     f.add_argument("--out", default=None, metavar="PATH",
                    help="output path without extension; defaults to a slug of the brief")
+
+    rt = sub.add_parser("rate", parents=[shared], help="score a CSV, Clay export, or find JSON")
+    rt.add_argument("source", help="CSV / Clay export / JSON from find")
+    rt.add_argument("--format", default="md,html,pdf")
+    rt.add_argument("--out", default="rating")
+    rt.add_argument("--preset", default="awareness+leads")
+    rt.set_defaults(fn=cmd_rate)
+
+    rn = sub.add_parser("run", parents=[shared], help="find, then rate — one report")
+    rn.add_argument("brief")
+    rn.add_argument("--scenario", default="auto")
+    rn.add_argument("--deep", type=int, default=10)
+    rn.add_argument("--cheap", action="store_true")
+    rn.add_argument("--format", default="md,html,pdf")
+    rn.add_argument("--out", default="run")
+    rn.set_defaults(fn=cmd_run)
     f.add_argument("--dry-run", action="store_true",
                    help="print the exact queries and the credit ceiling, spend nothing")
     f.add_argument("--max-credits", type=int, default=None, metavar="N",

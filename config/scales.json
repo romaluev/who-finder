@@ -1,0 +1,20 @@
+{
+  "_note": "lo maps to 0, hi maps to 100. log=true uses log10 of the value.",
+  "icp_share_engagers": {"lo": 0.10, "hi": 0.45},
+  "icp_share_seed_pool": {"lo": 0.10, "hi": 0.55},
+  "director_plus_share": {"lo": 0.08, "hi": 0.40},
+  "enterprise_share": {"lo": 0.05, "hi": 0.40},
+  "target_account_hits": {"lo": 0, "hi": 12},
+  "geo_fit_share": {"lo": 0.20, "hi": 0.80},
+  "followers": {"lo": 1000, "hi": 250000, "log": true},
+  "median_impressions_est": {"lo": 500, "hi": 50000, "log": true},
+  "authenticity": {"lo": 40, "hi": 95},
+  "eng_per_1k_followers": {"lo": 0.3, "hi": 8.0, "log": true},
+  "comment_depth": {"lo": 4, "hi": 28},
+  "posts_per_week": {"lo": 0.4, "hi": 4.0},
+  "trend_90d": {"lo": -0.4, "hi": 0.6},
+  "brand_topic_fit": {"lo": 0.15, "hi": 0.75},
+  "topic_concentration": {"lo": 0.25, "hi": 0.80},
+  "audience_interest_alignment": {"lo": 0.10, "hi": 0.55},
+  "headline_alignment": {"lo": 0.20, "hi": 0.90}
+}

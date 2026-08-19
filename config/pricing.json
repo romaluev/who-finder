@@ -1,0 +1,47 @@
+{
+  "cpm_target": 45,
+  "engagement_dollar": 2.5,
+  "default_icp_share": 0.25,
+  "lead_ctr": 0.006,
+  "lead_cvr": 0.03,
+  "lead_value": 400,
+  "lead_split": 0.5,
+  "k_default": 20,
+  "k_by_tier": {
+    "lt5k": 30,
+    "5_20k": 40,
+    "20_50k": 50,
+    "50_100k": 60,
+    "100_500k": 75,
+    "500k_1m": 90,
+    "gt1m": 100
+  },
+  "floors": {
+    "lt5k": 150,
+    "5_20k": 250,
+    "20_50k": 400,
+    "50_100k": 750,
+    "100_500k": 1500,
+    "500k_1m": 3000,
+    "gt1m": 5000
+  },
+  "deliverable": {
+    "text": 1.0,
+    "image": 1.0,
+    "carousel": 1.2,
+    "video": 1.5,
+    "newsletter": 1.5,
+    "series": 2.6,
+    "amplification": 0.35
+  },
+  "rights": {
+    "whitelisting": 1.4,
+    "exclusivity_60d": 1.25,
+    "rush": 1.2
+  },
+  "authority": {
+    "top_voice": 1.3,
+    "recognised": 1.15,
+    "none": 1.0
+  }
+}
